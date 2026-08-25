@@ -213,10 +213,13 @@ export class LiveHttpDriver implements WorkflowDriver {
       return;
     }
 
-    const rowSel = requireSelector(sel, 'listRow');
+    let rowSel = requireSelector(sel, 'listRow');
+    if (sel.statusPending && !rowSel.includes(':has(')) {
+      rowSel = `${rowSel}:has(${sel.statusPending})`;
+    }
     const row = page.locator(rowSel).first();
     if ((await row.count()) === 0) {
-      ctx.log('info', 'WORKFLOW', 'Список пуст — свободных заявок нет');
+      ctx.log('info', 'WORKFLOW', 'Свободных заявок в обработке нет — ожидаю новых');
       await ctx.delay(3);
       return;
     }
@@ -226,7 +229,7 @@ export class LiveHttpDriver implements WorkflowDriver {
     await ctx.delay(1.5);
 
     const url = page.url();
-    const m = url.match(/(\d{3,})(?:[^\d]*)?$/);
+    const m = url.match(/(\d+)\/?(?:[?#].*)?$/) ?? url.match(/(\d{3,})/);
     const appId = m ? m[1] : url.slice(-40);
     ctx.setStep(`Открыта заявка #${appId}`);
     await ctx.saveCheckpoint({
