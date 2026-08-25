@@ -3,10 +3,15 @@ import { buildServer } from './server.js';
 import { log } from './logger.js';
 import { getSetting } from './settings.js';
 import { PORT } from './config.js';
+import { startDemoFeed } from './demo-site.js';
 
 const engine = new Engine();
 await buildServer(engine);
 log('info', 'SYSTEM', `SEM панель запущена на порту ${PORT}`);
+
+if (process.env.DISABLE_DEMO_FEED !== '1') {
+  startDemoFeed();
+}
 
 if (getSetting('autostart')) {
   void engine.start();

@@ -27,11 +27,21 @@ interface Selectors {
   acceptButton?: string;
 }
 
+const DEFAULT_DEMO_SELECTORS: Selectors = {
+  listRow: '#appsTable tbody tr',
+  openLink: 'a.open',
+  statusPending: '.badge.pending',
+  statusAccepted: '.badge.accepted',
+  acceptButton: '#acceptBtn',
+};
+
 function readSelectors(): Selectors {
   const raw = String(getSetting('selectorsJson') || '').trim();
-  if (!raw) return {};
+  if (!raw) return { ...DEFAULT_DEMO_SELECTORS };
   try {
-    return JSON.parse(raw) as Selectors;
+    const parsed = JSON.parse(raw) as Selectors;
+    if (!parsed.listRow && !parsed.acceptButton) return { ...DEFAULT_DEMO_SELECTORS };
+    return parsed;
   } catch {
     throw new Error('Селекторы заданы неверно — это должен быть корректный JSON');
   }

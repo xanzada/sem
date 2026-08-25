@@ -84,6 +84,11 @@ function renderStatus() {
   $('#btnPause').textContent = snap.paused ? '▶' : '⏸';
   $('#speedRange').value = snap.speed;
   $('#speedVal').textContent = '×' + Number(snap.speed);
+
+  const attention = ['AUTH_REQUIRED', 'MANUAL_REVIEW', 'ERROR', 'SECURITY_VERIFICATION_WAIT']
+    .includes(snap.state) && snap.state !== 'SECURITY_VERIFICATION_WAIT';
+  const vncAlert = ['AUTH_REQUIRED', 'MANUAL_REVIEW', 'ERROR'].includes(snap.state);
+  document.querySelectorAll('.nav-btn[data-tab="vnc"]').forEach((b) => b.classList.toggle('alert', vncAlert));
 }
 
 function feedItemEl(item) {

@@ -9,6 +9,31 @@ services:
     volumes:
       - ./data:/app/data
     environment:
-      - NOVNC_PUBLIC_URL=${NOVNC_PUBLIC_URL:-}
-      - AUTOSTART=${AUTOSTART:-}
+      # --- режим работы ---
+      SEM_MODE: ${SEM_MODE:-live}
+      AUTOSTART: ${AUTOSTART:-true}
+      # --- целевой сайт и учётные данные (Dokploy → Environment) ---
+      SITE_URL: ${SITE_URL:-http://127.0.0.1:8080/site}
+      SITE_LIST_URL: ${SITE_LIST_URL:-}
+      SITE_USERNAME: ${SITE_USERNAME:-admin}
+      SITE_PASSWORD: ${SITE_PASSWORD:-12345678Ss}
+      SELECTORS_JSON: ${SELECTORS_JSON:-}
+      # --- доступ к панели SEM (Basic Auth) ---
+      PANEL_USER: ${PANEL_USER:-admin}
+      PANEL_PASSWORD: ${PANEL_PASSWORD:-12345678Ss}
+      # --- встроенный демо-сайт ---
+      DEMO_USER: ${DEMO_USER:-admin}
+      DEMO_PASS: ${DEMO_PASS:-12345678Ss}
+      DEMO_SESSION_MINUTES: ${DEMO_SESSION_MINUTES:-10}
+      # --- поведение бота ---
+      SPEED: ${SPEED:-1}
+      ACTION_DELAY_MS: ${ACTION_DELAY_MS:-800}
+      KEEPALIVE_SEC: ${KEEPALIVE_SEC:-180}
+      SECURITY_TIMEOUT_MIN: ${SECURITY_TIMEOUT_MIN:-30}
+      # --- Telegram уведомления ---
+      TELEGRAM_TOKEN: ${TELEGRAM_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      # --- прочее ---
+      TZ: ${TZ:-Asia/Almaty}
+      NOVNC_PUBLIC_URL: ${NOVNC_PUBLIC_URL:-}
     shm_size: "1gb"

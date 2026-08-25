@@ -34,6 +34,35 @@ export const DEFAULT_SETTINGS: SemSettings = {
 
 export const SETTINGS_KEYS = Object.keys(DEFAULT_SETTINGS) as (keyof SemSettings)[];
 
+const ENV_KEYS: Partial<Record<keyof SemSettings, string>> = {
+  mode: 'SEM_MODE',
+  siteUrl: 'SITE_URL',
+  listUrl: 'SITE_LIST_URL',
+  username: 'SITE_USERNAME',
+  password: 'SITE_PASSWORD',
+  selectorsJson: 'SELECTORS_JSON',
+  speed: 'SPEED',
+  actionDelayMs: 'ACTION_DELAY_MS',
+  keepaliveSec: 'KEEPALIVE_SEC',
+  securityTimeoutMin: 'SECURITY_TIMEOUT_MIN',
+  autostart: 'AUTOSTART',
+  telegramToken: 'TELEGRAM_TOKEN',
+  telegramChatId: 'TELEGRAM_CHAT_ID',
+};
+
+function envValue(key: keyof SemSettings): unknown {
+  const name = ENV_KEYS[key];
+  const raw = name ? process.env[name] : undefined;
+  if (raw == null || raw === '') return undefined;
+  const def = DEFAULT_SETTINGS[key];
+  if (typeof def === 'number') {
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : undefined;
+  }
+  if (typeof def === 'boolean') return raw === 'true' || raw === '1';
+  return raw;
+}
+
 const stmtAll = db.prepare('SELECT key,value FROM settings');
 const stmtGet = db.prepare('SELECT value FROM settings WHERE key=?');
 const stmtSet = db.prepare(
@@ -49,6 +78,10 @@ export function getAllSettings(): SemSettings {
     } catch {
       out[row.key] = row.value;
     }
+  }
+  for (const key of SETTINGS_KEYS) {
+    const ev = envValue(key);
+    if (ev !== undefined) out[key] = ev;
   }
   return out as unknown as SemSettings;
 }

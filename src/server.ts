@@ -1,6 +1,10 @@
 import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
+import formBody from '@fastify/formbody';
 import { WebSocketServer } from 'ws';
+import http from 'node:http';
+import net from 'node:net';
+import { timingSafeEqual } from 'node:crypto';
 import { PUBLIC_DIR, SHOTS_DIR, PORT, HOST, NOVNC_PUBLIC_URL, VERSION } from './config.js';
 import { bus } from './bus.js';
 import { db } from './db.js';
@@ -12,7 +16,87 @@ import {
 } from './settings.js';
 import { analyticsSummary } from './analytics.js';
 import { latestCheckpoint } from './checkpoint.js';
+import { registerDemoSite } from './demo-site.js';
 import type { Engine } from './engine.js';
+
+const PANEL_USER = process.env.PANEL_USER ?? 'admin';
+const PANEL_PASSWORD = process.env.PANEL_PASSWORD ?? '';
+const AUTH_ENABLED = PANEL_PASSWORD.length > 0;
+
+const VNC_UPSTREAM = process.env.SEM_VNC_UPSTREAM ?? 'http://127.0.0.1:6080';
+
+function expectedAuthHeader(): string {
+  return 'Basic ' + Buffer.from(`${PANEL_USER}:${PANEL_PASSWORD}`).toString('base64');
+}
+
+function safeEqual(a: string, b: string): boolean {
+  const ba = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ba.length !== bb.length) return false;
+  return timingSafeEqual(ba, bb);
+}
+
+function vncLocalUrl(): string {
+  if (NOVNC_PUBLIC_URL) return NOVNC_PUBLIC_URL;
+  if (process.env.SEM_VNC_LOCAL === '1') {
+    return '/vnc/vnc.html?autoconnect=1&resize=scale&path=vnc/websockify';
+  }
+  return '';
+}
+
+function proxyVncHttp(req: any, reply: any): void {
+  reply.hijack();
+  const u = new URL(VNC_UPSTREAM);
+  const upstreamReq = http.request(
+    {
+      host: u.hostname,
+      port: Number(u.port || 80),
+      path: req.raw.url,
+      method: req.method,
+      headers: { ...req.headers, host: u.host },
+    },
+    (res) => {
+      try {
+        reply.raw.writeHead(res.statusCode ?? 502, res.headers);
+        res.pipe(reply.raw);
+      } catch {
+        /* socket gone */
+      }
+    }
+  );
+  upstreamReq.on('error', () => {
+    try {
+      reply.raw.writeHead(502, { 'content-type': 'text/plain' });
+      reply.raw.end('noVNC upstream unavailable');
+    } catch {
+      /* ignore */
+    }
+  });
+  req.raw.pipe(upstreamReq);
+}
+
+function tunnelVncWs(req: any, socket: net.Socket, head: Buffer): void {
+  const u = new URL(VNC_UPSTREAM);
+  const client = net.connect(Number(u.port || 80), u.hostname, () => {
+    const lines: string[] = [`GET ${req.url} HTTP/1.1`, `Host: ${u.host}`];
+    for (const [k, v] of Object.entries(req.headers)) {
+      const lk = k.toLowerCase();
+      if (lk === 'host' || lk === 'connection' || lk === 'upgrade') continue;
+      lines.push(`${k}: ${Array.isArray(v) ? v.join(', ') : v}`);
+    }
+    lines.push('Connection: Upgrade', 'Upgrade: websocket');
+    client.write(lines.join('\r\n') + '\r\n\r\n');
+    if (head && head.length > 0) client.write(head);
+  });
+  client.pipe(socket);
+  socket.pipe(client);
+  const kill = (): void => {
+    client.destroy();
+    socket.destroy();
+  };
+  client.on('error', kill);
+  socket.on('error', kill);
+}
 
 export async function buildServer(engine: Engine): Promise<void> {
   const app = Fastify({ logger: false });
@@ -23,13 +107,33 @@ export async function buildServer(engine: Engine): Promise<void> {
     prefix: '/shots/',
     decorateReply: false,
   });
+  await app.register(formBody);
+
+  registerDemoSite(app);
+
+  app.addHook('onRequest', async (req, reply) => {
+    if (req.url.startsWith('/vnc')) {
+      proxyVncHttp(req, reply);
+      return reply;
+    }
+  });
+
+  app.addHook('onRequest', async (req, reply) => {
+    if (!AUTH_ENABLED) return;
+    if (req.url === '/healthz' || req.url.startsWith('/healthz?')) return;
+    const hdr = String(req.headers.authorization ?? '');
+    if (!safeEqual(hdr, expectedAuthHeader())) {
+      reply.code(401).header('www-authenticate', 'Basic realm="SEM panel"');
+      return reply.send();
+    }
+  });
 
   app.get('/api/status', async () => ({
     snap: engine.snapshot(),
     time: new Date().toISOString(),
   }));
 
-  app.get('/api/meta', async () => ({ vncUrl: NOVNC_PUBLIC_URL, version: VERSION }));
+  app.get('/api/meta', async () => ({ vncUrl: vncLocalUrl(), version: VERSION }));
 
   app.get('/api/settings', async () => maskSettings(getAllSettings()));
 
@@ -93,7 +197,12 @@ export async function buildServer(engine: Engine): Promise<void> {
 
   const wss = new WebSocketServer({ noServer: true });
   app.server.on('upgrade', (req, socket, head) => {
-    if (req.url === '/ws') {
+    const url = req.url ?? '';
+    if (url.startsWith('/vnc')) {
+      tunnelVncWs(req as any, socket as any, head as any);
+      return;
+    }
+    if (url === '/ws') {
       wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
     } else {
       socket.destroy();
