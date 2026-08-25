@@ -112,6 +112,8 @@ function layout(inner: string, title = 'Служба заявок'): string {
 }
 
 export function registerDemoSite(app: FastifyInstance): void {
+  app.get('/site', async (_req, reply) => reply.redirect('/site/apps'));
+
   app.get('/site/login', async (req, reply) => {
     const body = `
 <div class="card" style="max-width:380px;margin:40px auto">

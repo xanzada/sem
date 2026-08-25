@@ -204,11 +204,6 @@ export class LiveHttpDriver implements WorkflowDriver {
     await ctx.delay(1);
 
     const cls = await classifyPage(page).catch(() => ({ kind: 'NORMAL' as const, reason: '' }));
-    ctx.log(
-      'info',
-      'SYSTEM',
-      `[dbg] url=${String(page.url()).slice(0, 90)} kind=${cls.kind} ${cls.reason}`
-    );
     if (cls.kind === 'AUTH') {
       ctx.log('warn', 'AUTH', 'Сессия потеряна: сайт требует вход. Запускаю автоматический вход.');
       return;
