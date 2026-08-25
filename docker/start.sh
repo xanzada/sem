@@ -3,6 +3,10 @@ set -euo pipefail
 
 mkdir -p /app/data/shots
 
+rm -f /app/data/profile/SingletonLock \
+      /app/data/profile/SingletonSocket \
+      /app/data/profile/SingletonCookie 2>/dev/null || true
+
 cleanup() {
   jobs -p | xargs -r kill 2>/dev/null || true
 }

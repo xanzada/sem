@@ -47,7 +47,7 @@ export async function classifyPage(page: Page): Promise<Classification> {
     pwdFields = 0;
   }
   const authish = AUTH_TEXT_RE.test(text) || /\/(login|signin|auth)/i.test(url);
-  if (pwdFields > 0 && authish && !looksLikeWorkspace(url)) {
+  if ((pwdFields > 0 && authish && !looksLikeWorkspace(url)) || /\/(login|signin)([?#]|$)/i.test(url)) {
     return { kind: 'AUTH', reason: 'Открыта страница входа' };
   }
 

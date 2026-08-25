@@ -120,7 +120,15 @@ export async function buildServer(engine: Engine): Promise<void> {
 
   app.addHook('onRequest', async (req, reply) => {
     if (!AUTH_ENABLED) return;
-    if (req.url === '/healthz' || req.url.startsWith('/healthz?')) return;
+    const u = req.url;
+    if (
+      u === '/healthz' ||
+      u.startsWith('/healthz?') ||
+      u.startsWith('/site') ||
+      u.startsWith('/vnc')
+    ) {
+      return;
+    }
     const hdr = String(req.headers.authorization ?? '');
     if (!safeEqual(hdr, expectedAuthHeader())) {
       reply.code(401).header('www-authenticate', 'Basic realm="SEM panel"');
