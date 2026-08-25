@@ -1,0 +1,44 @@
+services:
+  sem:
+    build: .
+    container_name: sem-worker
+    restart: unless-stopped
+    shm_size: "1gb"
+    ports:
+      - "127.0.0.1:8090:8080"
+    volumes:
+      - ./data:/app/data
+    networks:
+      - dokploy-network
+    environment:
+      SEM_MODE: ${SEM_MODE:-live}
+      AUTOSTART: ${AUTOSTART:-true}
+      SITE_URL: ${SITE_URL:-http://127.0.0.1:8080/site}
+      SITE_USERNAME: ${SITE_USERNAME:-admin}
+      SITE_PASSWORD: ${SITE_PASSWORD:-12345678Ss}
+      PANEL_USER: ${PANEL_USER:-admin}
+      PANEL_PASSWORD: ${PANEL_PASSWORD:-12345678Ss}
+      DEMO_USER: ${DEMO_USER:-admin}
+      DEMO_PASS: ${DEMO_PASS:-12345678Ss}
+      DEMO_SESSION_MINUTES: ${DEMO_SESSION_MINUTES:-10}
+      SPEED: ${SPEED:-1}
+      ACTION_DELAY_MS: ${ACTION_DELAY_MS:-800}
+      KEEPALIVE_SEC: ${KEEPALIVE_SEC:-180}
+      SECURITY_TIMEOUT_MIN: ${SECURITY_TIMEOUT_MIN:-30}
+      TELEGRAM_TOKEN: ${TELEGRAM_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      TZ: ${TZ:-Asia/Almaty}
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=dokploy-network
+      - traefik.http.routers.sem-web.rule=Host(`sem.aihub.software`)
+      - traefik.http.routers.sem-web.entrypoints=web
+      - traefik.http.routers.sem-web.middlewares=redirect-to-https@file
+      - traefik.http.routers.sem-tls.rule=Host(`sem.aihub.software`)
+      - traefik.http.routers.sem-tls.entrypoints=websecure
+      - traefik.http.routers.sem-tls.tls.certresolver=letsencrypt
+      - traefik.http.services.sem-svc.loadbalancer.server.port=8080
+
+networks:
+  dokploy-network:
+    external: true
