@@ -44,6 +44,10 @@ function vncLocalUrl(): string {
   return '';
 }
 
+function stripVncPrefix(url: string): string {
+  return url.replace(/^\/vnc\/?/, '/') || '/';
+}
+
 function proxyVncHttp(req: any, reply: any): void {
   reply.hijack();
   const u = new URL(VNC_UPSTREAM);
@@ -51,7 +55,7 @@ function proxyVncHttp(req: any, reply: any): void {
     {
       host: u.hostname,
       port: Number(u.port || 80),
-      path: req.raw.url,
+      path: stripVncPrefix(req.raw.url ?? '/'),
       method: req.method,
       headers: { ...req.headers, host: u.host },
     },
@@ -78,7 +82,7 @@ function proxyVncHttp(req: any, reply: any): void {
 function tunnelVncWs(req: any, socket: net.Socket, head: Buffer): void {
   const u = new URL(VNC_UPSTREAM);
   const client = net.connect(Number(u.port || 80), u.hostname, () => {
-    const lines: string[] = [`GET ${req.url} HTTP/1.1`, `Host: ${u.host}`];
+    const lines: string[] = [`GET ${stripVncPrefix(req.url)} HTTP/1.1`, `Host: ${u.host}`];
     for (const [k, v] of Object.entries(req.headers)) {
       const lk = k.toLowerCase();
       if (lk === 'host' || lk === 'connection' || lk === 'upgrade') continue;
