@@ -1,0 +1,14 @@
+services:
+  sem:
+    build: .
+    container_name: sem-worker
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "127.0.0.1:6080:6080"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - NOVNC_PUBLIC_URL=${NOVNC_PUBLIC_URL:-}
+      - AUTOSTART=${AUTOSTART:-}
+    shm_size: "1gb"

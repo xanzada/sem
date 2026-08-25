@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0f14">
+<title>SEM — оператор заявок</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
+<link rel="stylesheet" href="/css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-orb" id="brandOrb"><span class="orb-core"></span><span class="orb-ring"></span></div>
+    <div class="brand-text">
+      <div class="brand-name">SEM</div>
+      <div class="brand-sub" id="stateShort">загрузка…</div>
+    </div>
+  </div>
+  <div class="top-actions">
+    <span class="mode-badge" id="modeBadge">—</span>
+    <button class="btn btn-primary" id="btnStart">▶ Старт</button>
+    <button class="btn btn-ghost" id="btnPause">⏸</button>
+    <button class="btn btn-danger" id="btnStop">⏹</button>
+  </div>
+</header>
+
+<main>
+  <!-- ===== ПАНЕЛЬ ===== -->
+  <section class="tab-page active" data-tab="panel">
+    <div class="card status-card" id="statusCard">
+      <div class="status-main">
+        <div class="big-orb" id="bigOrb"><span></span><i></i></div>
+        <div class="status-info">
+          <div class="status-state" id="stateRu">—</div>
+          <div class="status-step shimmer-parent"><span id="stepText">—</span></div>
+          <div class="status-meta">
+            <span class="pill" id="currentAppPill">Заявка: —</span>
+            <span class="pill" id="sincePill">—</span>
+          </div>
+        </div>
+        <div class="today-box">
+          <div class="today-num" id="todayNum">0</div>
+          <div class="today-label">принято сегодня</div>
+        </div>
+      </div>
+      <div class="speed-row">
+        <label for="speedRange">Скорость бота</label>
+        <input type="range" id="speedRange" min="0.25" max="3" step="0.25" value="1">
+        <span class="speed-val" id="speedVal">×1</span>
+      </div>
+    </div>
+
+    <div class="section-title">Живая лента работы</div>
+    <div class="feed card" id="feed"></div>
+  </section>
+
+  <!-- ===== АНАЛИТИКА ===== -->
+  <section class="tab-page" data-tab="analytics">
+    <div class="stat-grid">
+      <div class="card stat"><div class="stat-num" id="stToday">—</div><div class="stat-label">Сегодня</div></div>
+      <div class="card stat"><div class="stat-num" id="stWeek">—</div><div class="stat-label">За 7 дней</div></div>
+      <div class="card stat"><div class="stat-num" id="stTotal">—</div><div class="stat-label">Всего</div></div>
+      <div class="card stat"><div class="stat-num" id="stAvg">—</div><div class="stat-label">Среднее время</div></div>
+    </div>
+    <div class="section-title">Активность за 24 часа</div>
+    <div class="card chart-card"><canvas id="chart24"></canvas></div>
+    <div class="section-title">Последние заявки</div>
+    <div class="card table-card">
+      <table class="tbl">
+        <thead><tr><th>Время</th><th>Заявка</th><th>Результат</th><th>Время обр.</th></tr></thead>
+        <tbody id="recentBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===== НАСТРОЙКИ ===== -->
+  <section class="tab-page" data-tab="settings">
+    <form class="card form" id="settingsForm" autocomplete="off">
+      <div class="form-row two">
+        <div>
+          <label>Режим работы</label>
+          <select name="mode" id="modeSel">
+            <option value="simulation">Демо (без сайта)</option>
+            <option value="live">Боевой (реальный сайт)</option>
+          </select>
+        </div>
+        <div>
+          <label>Автозапуск при старте сервера</label>
+          <label class="switch"><input type="checkbox" name="autostart"><span class="slider"></span></label>
+        </div>
+      </div>
+
+      <div class="divider">Сайт и вход</div>
+      <div class="form-row"><label>Адрес сайта</label><input type="url" name="siteUrl" placeholder="https://example.kz"></div>
+      <div class="form-row two">
+        <div><label>Логин</label><input type="text" name="username" placeholder="login"></div>
+        <div><label>Пароль</label><input type="password" name="password" placeholder="••••••••"></div>
+      </div>
+      <div class="form-row"><label>URL списка заявок (необязательно)</label><input type="url" name="listUrl" placeholder="https://example.kz/applications"></div>
+
+      <details class="sel-details">
+        <summary>Селекторы элементов сайта (JSON)</summary>
+        <div class="hint">Заполняется после анализа сайта по вашим скриншотам. Пример:
+<code>{"listRow":"table tbody tr","openLink":"a","statusPending":".status-pending","statusAccepted":".status-accepted","acceptButton":"#acceptBtn"}</code></div>
+        <textarea name="selectorsJson" rows="5" placeholder='{"listRow": "...", "acceptButton": "..."}'></textarea>
+      </details>
+
+      <div class="divider">Поведение</div>
+      <div class="form-row three">
+        <div><label>Скорость ×</label><input type="number" name="speed" min="0.25" max="3" step="0.25"></div>
+        <div><label>Задержка действия, мс</label><input type="number" name="actionDelayMs" min="200" max="10000" step="100"></div>
+        <div><label>Keep-alive, сек</label><input type="number" name="keepaliveSec" min="30" max="900" step="10"></div>
+      </div>
+      <div class="form-row"><label>Таймаут ожидания проверки безопасности, мин</label><input type="number" name="securityTimeoutMin" min="5" max="120" step="5"></div>
+
+      <div class="divider">Telegram уведомления</div>
+      <div class="form-row two">
+        <div><label>Bot token</label><input type="password" name="telegramToken" placeholder="••••••••"></div>
+        <div><label>Chat ID</label><input type="text" name="telegramChatId" placeholder="123456789"></div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary wide">💾 Сохранить настройки</button>
+        <button type="button" class="btn btn-ghost wide" id="btnTestLogin">🔑 Проверить вход на сайт</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- ===== ЖУРНАЛ / ИНЦИДЕНТЫ ===== -->
+  <section class="tab-page" data-tab="journal">
+    <div class="chips" id="journalChips">
+      <button class="chip active" data-cat="">Все</button>
+      <button class="chip" data-cat="AUTH">🔐 Вход</button>
+      <button class="chip" data-cat="SECURITY">🛡 Безопасность</button>
+      <button class="chip" data-cat="WORKFLOW">📋 Заявки</button>
+      <button class="chip" data-cat="SYSTEM">⚙️ Система</button>
+    </div>
+    <div class="feed card journal" id="journalFeed"></div>
+  </section>
+
+  <!-- ===== VNC ===== -->
+  <section class="tab-page" data-tab="vnc">
+    <div class="card vnc-card">
+      <div class="section-title">Удалённый браузер (VNC)</div>
+      <div id="vncWrap"><div class="hint" style="padding:16px">VNC не настроен. Задайте переменную окружения NOVNC_PUBLIC_URL.</div></div>
+    </div>
+  </section>
+</main>
+
+<nav class="bottom-nav">
+  <button class="nav-btn active" data-tab="panel"><span>📊</span>Панель</button>
+  <button class="nav-btn" data-tab="analytics"><span>📈</span>Статистика</button>
+  <button class="nav-btn" data-tab="settings"><span>⚙️</span>Настройки</button>
+  <button class="nav-btn" data-tab="journal"><span>📜</span>Журнал</button>
+  <button class="nav-btn" data-tab="vnc"><span>🖥</span>VNC</button>
+</nav>
+
+<div class="toast" id="toast"></div>
+<script src="/js/app.js"></script>
+</body>
+</html>
