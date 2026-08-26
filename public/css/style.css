@@ -242,6 +242,30 @@ main { padding: 14px 14px calc(90px + env(safe-area-inset-bottom)); max-width: 7
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+/* ---------- help ? ---------- */
+.qmark {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 17px; height: 17px; margin-left: 6px;
+  border-radius: 50%; background: #1c2740; color: #9dc0ff;
+  font-size: 11px; font-weight: 800; cursor: pointer; vertical-align: middle;
+  border: 1px solid rgba(79,140,255,.35); user-select: none;
+}
+.qmark:hover { background: var(--accent); color: #fff; }
+.modal {
+  position: fixed; inset: 0; z-index: 80; display: flex;
+  align-items: center; justify-content: center; padding: 20px;
+  background: rgba(5,8,12,.7); backdrop-filter: blur(4px);
+}
+.modal.hidden { display: none; }
+.modal-card {
+  background: #131b28; border: 1px solid var(--border); border-radius: 16px;
+  max-width: 440px; width: 100%; padding: 18px; max-height: 80vh; overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,.6);
+  animation: fadeIn .18s ease;
+}
+.modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 10px; }
+.modal-head b { color: #9dc0ff; }
+
 @media (min-width: 700px) {
   main { padding-top: 22px; }
   .stat-grid { grid-template-columns: repeat(4, 1fr); }

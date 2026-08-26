@@ -3,6 +3,7 @@ import { WState, STATE_META } from './states.js';
 import { getAllSettings, getSetting } from './settings.js';
 import { classifyPage, type Classification } from './classifier.js';
 import { getPage, closeBrowser, screenshot, backupSession } from './browser.js';
+import { TZ } from './config.js';
 import { log } from './logger.js';
 import { bus } from './bus.js';
 import { tgNotify } from './telegram.js';
@@ -46,6 +47,49 @@ export class Engine {
   private demoSeqRestored = 0;
   private sessionBackupTimer: NodeJS.Timeout | null = null;
   private authAlerted = false;
+  private pausedBySchedule = false;
+
+  private hourNow(): number {
+    try {
+      return Number(
+        new Intl.DateTimeFormat('en-GB', {
+          hour: '2-digit',
+          hour12: false,
+          timeZone: TZ,
+        }).format(new Date())
+      );
+    } catch {
+      return new Date().getHours();
+    }
+  }
+
+  private checkSchedule(): void {
+    const s = getAllSettings();
+    const inside = (() => {
+      if (!s.scheduleEnabled) return true;
+      const from = Number(s.scheduleFrom) || 0;
+      const to = Number(s.scheduleTo) || 24;
+      const h = this.hourNow();
+      return from <= to ? h >= from && h < to : h >= from || h < to;
+    })();
+
+    if (!inside && this.running && !this.paused) {
+      this.paused = true;
+      this.pausedBySchedule = true;
+      log(
+        'info',
+        'CONTROL',
+        `Внерабочее время (сейчас ${this.hourNow()} ч) — автопауза. Браузер закрывается для экономии ресурсов.`
+      );
+      this.setState(WState.WAITING, 'Внерабочее время — автопауза');
+      void closeBrowser();
+    } else if (inside && this.paused && this.pausedBySchedule) {
+      this.pausedBySchedule = false;
+      this.paused = false;
+      log('info', 'CONTROL', 'Рабочее время наступило — автоматическое возобновление работы.');
+      this.setState(WState.RUNNING, 'Работа');
+    }
+  }
 
   snapshot(): Snapshot {
     const meta = STATE_META[this.state];
@@ -155,6 +199,7 @@ export class Engine {
   resume(): void {
     if (!this.paused) return;
     this.paused = false;
+    this.pausedBySchedule = false;
     log('info', 'CONTROL', 'Работа возобновлена');
     this.setState(WState.RUNNING, 'Работа');
   }
@@ -252,6 +297,7 @@ export class Engine {
     let unexpectedCount = 0;
     while (this.running && !this.stopRequested) {
       try {
+        this.checkSchedule();
         if (this.paused) {
           await sleep(1500);
           continue;

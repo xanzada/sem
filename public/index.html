@@ -82,7 +82,7 @@
   <!-- ===== НАСТРОЙКИ ===== -->
   <section class="tab-page" data-tab="settings">
     <div class="card form" style="margin-bottom:14px">
-      <div class="divider" style="border:none;margin-top:0;padding-top:0">🎯 Режим обучения — укажите элементы сами</div>
+      <div class="divider" style="border:none;margin-top:0;padding-top:0">🎯 Режим обучения — укажите элементы сами <span class="qmark" data-help="teach">?</span></div>
       <div class="hint">1) Остановите бота (⏸/⏹) &nbsp;2) Перейдите во вкладку VNC и нажимайте на нужные элементы сайта &nbsp;3) Ниже задайте роль каждому элементу и сохраните.</div>
       <div class="form-row two">
         <div><label>Открыть URL (пусто = сайт)</label><input type="url" id="pickUrl" placeholder="https://..."></div>
@@ -100,7 +100,7 @@
     </div>
 
     <div class="card form" style="margin-bottom:14px">
-      <div class="divider" style="border:none;margin-top:0;padding-top:0">📋 Порядок действий — бот выполняет шаги по очереди</div>
+      <div class="divider" style="border:none;margin-top:0;padding-top:0">📋 Порядок действий — бот выполняет шаги по очереди <span class="qmark" data-help="steps">?</span></div>
       <div id="stepsOut" style="display:flex;flex-direction:column;gap:8px"></div>
       <div style="display:flex;gap:8px;margin-top:10px">
         <button class="btn btn-ghost btn-sm" id="btnStepsRefresh">↻ Обновить</button>
@@ -111,7 +111,7 @@
     <form class="card form" id="settingsForm" autocomplete="off">
       <div class="form-row two">
         <div>
-          <label>Режим работы</label>
+          <label>Режим работы <span class="qmark" data-help="mode">?</span></label>
           <select name="mode" id="modeSel">
             <option value="simulation">Демо (без сайта)</option>
             <option value="live">Боевой (реальный сайт)</option>
@@ -123,7 +123,7 @@
         </div>
       </div>
 
-      <div class="divider">Сайт и вход</div>
+      <div class="divider">Сайт и вход <span class="qmark" data-help="site">?</span></div>
       <div class="form-row"><label>Адрес сайта</label><input type="url" name="siteUrl" placeholder="https://example.kz"></div>
       <div class="form-row two">
         <div><label>Логин</label><input type="text" name="username" placeholder="login"></div>
@@ -149,15 +149,28 @@
         </div>
       </details>
 
-      <div class="divider">Поведение</div>
+      <div class="divider">Поведение <span class="qmark" data-help="povedenie">?</span></div>
       <div class="form-row three">
         <div><label>Скорость ×</label><input type="number" name="speed" min="0.25" max="3" step="0.25"></div>
-        <div><label>Задержка действия, мс</label><input type="number" name="actionDelayMs" min="200" max="10000" step="100"></div>
+        <div><label>Задержка, мс</label><input type="number" name="actionDelayMs" min="200" max="10000" step="100"></div>
         <div><label>Keep-alive, сек</label><input type="number" name="keepaliveSec" min="30" max="900" step="10"></div>
       </div>
       <div class="form-row"><label>Таймаут ожидания проверки безопасности, мин</label><input type="number" name="securityTimeoutMin" min="5" max="120" step="5"></div>
 
-      <div class="divider">Telegram уведомления</div>
+      <div class="divider">График работы <span class="qmark" data-help="schedule">?</span></div>
+      <div class="form-row three">
+        <div>
+          <label>График</label>
+          <select name="scheduleEnabled">
+            <option value="false">Выключен (24/7)</option>
+            <option value="true">Включён</option>
+          </select>
+        </div>
+        <div><label>Час начала</label><input type="number" name="scheduleFrom" min="0" max="23"></div>
+        <div><label>Час конца</label><input type="number" name="scheduleTo" min="0" max="23"></div>
+      </div>
+
+      <div class="divider">Telegram уведомления <span class="qmark" data-help="telegram">?</span></div>
       <div class="form-row two">
         <div><label>Bot token</label><input type="password" name="telegramToken" placeholder="••••••••"></div>
         <div><label>Chat ID</label><input type="text" name="telegramChatId" placeholder="123456789"></div>
@@ -200,6 +213,13 @@
 </nav>
 
 <div class="toast" id="toast"></div>
+
+<div id="helpModal" class="modal hidden">
+  <div class="modal-card">
+    <div class="modal-head"><b id="helpTitle">?</b><button id="helpClose" class="btn btn-ghost btn-sm">✕</button></div>
+    <div id="helpBody" class="hint" style="font-size:13.5px;line-height:1.6"></div>
+  </div>
+</div>
 <script src="/js/app.js"></script>
 </body>
 </html>

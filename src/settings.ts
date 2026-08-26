@@ -13,6 +13,9 @@ export interface SemSettings {
   actionDelayMs: number;
   keepaliveSec: number;
   securityTimeoutMin: number;
+  scheduleEnabled: boolean;
+  scheduleFrom: number;
+  scheduleTo: number;
   autostart: boolean;
   evidenceShots: boolean;
   telegramToken: string;
@@ -32,6 +35,9 @@ export const DEFAULT_SETTINGS: SemSettings = {
   actionDelayMs: 800,
   keepaliveSec: 180,
   securityTimeoutMin: 30,
+  scheduleEnabled: false,
+  scheduleFrom: 9,
+  scheduleTo: 21,
   autostart: true,
   evidenceShots: true,
   telegramToken: '',
@@ -53,6 +59,9 @@ const ENV_KEYS: Partial<Record<keyof SemSettings, string>> = {
   actionDelayMs: 'ACTION_DELAY_MS',
   keepaliveSec: 'KEEPALIVE_SEC',
   securityTimeoutMin: 'SECURITY_TIMEOUT_MIN',
+  scheduleEnabled: 'SCHEDULE_ENABLED',
+  scheduleFrom: 'SCHEDULE_FROM',
+  scheduleTo: 'SCHEDULE_TO',
   autostart: 'AUTOSTART',
   evidenceShots: 'EVIDENCE_SHOTS',
   telegramToken: 'TELEGRAM_TOKEN',

@@ -91,7 +91,7 @@ export async function startPicker(url?: string): Promise<{ ok: boolean; url: str
   });
   await inject(page);
   active = true;
-  log('info', 'CONTROL', 'Оқыту режимі қосылды — сайтта элементтерді басуға болады');
+  log('info', 'CONTROL', 'Режим обучения включён — нажимайте на элементы сайта в VNC');
   return { ok: true, url: page.url() };
 }
 
@@ -99,7 +99,7 @@ async function inject(page: Page): Promise<void> {
   try {
     await page.evaluate(INJECT);
   } catch (e) {
-    log('warn', 'SYSTEM', `Оқыту скрипті енбеген: ${String(e).slice(0, 80)}`);
+    log('warn', 'SYSTEM', `Скрипт обучения не внедрился: ${String(e).slice(0, 80)}`);
   }
 }
 
@@ -186,7 +186,7 @@ export function saveAsSteps(): { ok: boolean; count: number; steps: Step[] } {
     }
   }
   setSettingsPatch({ stepsJson: JSON.stringify(steps) });
-  log('info', 'CONTROL', `Порядок действий сохранён: ${steps.length} шаг(ов)`);
+  log('info', 'CONTROL', `Порядок действий сохранён из обучения: ${steps.length} шаг(ов)`);
   return { ok: true, count: steps.length, steps };
 }
 
@@ -207,7 +207,7 @@ export function saveToSelectors(): { ok: boolean; json: string } {
   }
   const json = JSON.stringify(current, null, 2);
   setSettingsPatch({ selectorsJson: json });
-  log('info', 'CONTROL', `Оқыту нәтижесі селекторларға сақталды (${Object.keys(current).length} элемент)`);
+  log('info', 'CONTROL', `Результат обучения сохранён в селекторы (${Object.keys(current).length} эл.)`);
   return { ok: true, json };
 }
 
@@ -216,7 +216,7 @@ export function stop(): { ok: boolean } {
   void getPage()
     .then((p) => p.evaluate('window.__semPickerOn = false; location.reload();'))
     .catch(() => {});
-  log('info', 'CONTROL', 'Оқыту режимі аяқталды');
+  log('info', 'CONTROL', 'Режим обучения остановлен');
   return { ok: true };
 }
 

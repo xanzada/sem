@@ -283,7 +283,7 @@ export async function buildServer(engine: Engine): Promise<void> {
   app.post('/api/picker/start', async (req) => {
     const snap = engine.snapshot();
     if (snap.running && !snap.paused) {
-      return { ok: false, reason: 'Бот жұмыс істеп тұр — алдымен ⏸ Пауза немесе ⏹ Стоп' };
+      return { ok: false, reason: 'Бот сейчас работает — сначала нажмите ⏸ Пауза или ⏹ Стоп' };
     }
     const { url } = ((req.body ?? {}) as { url?: string }) ?? {};
     return picker.startPicker(url);
@@ -294,7 +294,7 @@ export async function buildServer(engine: Engine): Promise<void> {
   app.post('/api/picker/demo', async (req) => {
     const snap = engine.snapshot();
     if (snap.running && !snap.paused) {
-      return { ok: false, reason: 'Бот жұмыс істеп тұр' };
+      return { ok: false, reason: 'Бот сейчас работает — сначала ⏸ Пауза' };
     }
     const { url, selectors } = ((req.body ?? {}) as {
       url?: string;
