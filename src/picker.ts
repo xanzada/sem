@@ -5,7 +5,6 @@ import { log } from './logger.js';
 import type { Step } from './types.js';
 
 let active = false;
-let bindingReady = false;
 
 /* ------------------------------------------------------------------ *
  * Скрипт, который живёт на странице сайта внутри VNC.
@@ -222,19 +221,23 @@ export function addStep(d: { act?: string; sel?: string[]; note?: string }): num
 }
 
 async function ensureBinding(page: Page): Promise<void> {
-  if (bindingReady) return;
+  /* Всегда пытаемся зарегистрировать: после пересоздания браузера
+     (график работы, перезапуск) контекст новый — привязки теряются. */
   try {
     await page.exposeBinding('__semAddStep', (_src, d) => {
       addStep(d as { act?: string; sel?: string[]; note?: string });
     });
+  } catch {
+    /* уже зарегистрирован на этом контексте */
+  }
+  try {
     await page.exposeBinding('__semStop', async () => {
       active = false;
       log('info', 'CONTROL', 'Обучение завершено кнопкой в VNC');
     });
   } catch {
-    /* already exposed for this context */
+    /* уже зарегистрирован */
   }
-  bindingReady = true;
 }
 
 async function inject(page: Page): Promise<void> {
