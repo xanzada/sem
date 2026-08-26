@@ -117,6 +117,7 @@ export class Engine {
     if (!simulation) {
       try {
         await getPage();
+        await backupSession();
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         this.setState(WState.ERROR, `Браузер не запустился: ${msg.slice(0, 100)}`);
