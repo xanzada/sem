@@ -31,7 +31,7 @@ interface Selectors {
 
 export class SelectorBrokenError extends Error {
   constructor(public key: string) {
-    super(`Элемент сайтта табылмады: ${key}. Настройки → Селекторы жаңартыңыз.`);
+    super(`Элемент сайта не найден: ${key}. Обновите селекторы в Настройках.`);
   }
 }
 
