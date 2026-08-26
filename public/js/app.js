@@ -276,6 +276,7 @@ function bindUI() {
   $('#btnStart').addEventListener('click', () => control('start'));
   $('#btnStop').addEventListener('click', () => control('stop'));
   $('#btnPause').addEventListener('click', () => control(snap && snap.paused ? 'resume' : 'pause'));
+  $('#btnLogout').addEventListener('click', () => { location.href = '/logout'; });
 
   $('#speedRange').addEventListener('input', (e) => {
     $('#speedVal').textContent = '×' + e.target.value;

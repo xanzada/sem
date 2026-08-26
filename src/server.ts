@@ -4,7 +4,9 @@ import formBody from '@fastify/formbody';
 import { WebSocketServer } from 'ws';
 import http from 'node:http';
 import net from 'node:net';
-import { timingSafeEqual } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { PUBLIC_DIR, SHOTS_DIR, PORT, HOST, NOVNC_PUBLIC_URL, VERSION } from './config.js';
 import { bus } from './bus.js';
 import { db } from './db.js';
@@ -33,11 +35,44 @@ function expectedAuthHeader(): string {
   return 'Basic ' + Buffer.from(`${PANEL_USER}:${PANEL_PASSWORD}`).toString('base64');
 }
 
-function safeEqual(a: string, b: string): boolean {
-  const ba = Buffer.from(a);
-  const bb = Buffer.from(b);
-  if (ba.length !== bb.length) return false;
-  return timingSafeEqual(ba, bb);
+function signToken(exp: number): string {
+  return createHmac('sha256', PANEL_PASSWORD).update(`sem${exp}`).digest('hex');
+}
+
+function cookieValid(raw: string | undefined): boolean {
+  if (!raw) return false;
+  const [sig, expStr] = raw.split('.');
+  const exp = Number(expStr);
+  if (!exp || exp < Date.now()) return false;
+  const good = signToken(exp);
+  try {
+    return sig.length === good.length && timingSafeEqual(Buffer.from(sig), Buffer.from(good));
+  } catch {
+    return false;
+  }
+}
+
+function getCookie(req: any, name: string): string | undefined {
+  const raw = req.headers.cookie;
+  if (!raw) return undefined;
+  for (const part of String(raw).split(';')) {
+    const i = part.indexOf('=');
+    if (i > 0 && part.slice(0, i).trim() === name) return part.slice(i + 1).trim();
+  }
+  return undefined;
+}
+
+function authed(req: any): boolean {
+  const c = getCookie(req, 'sem_auth');
+  if (cookieValid(c)) return true;
+  const hdr = String(req.headers.authorization ?? '');
+  if (!hdr) return false;
+  const good = expectedAuthHeader();
+  try {
+    return hdr.length === good.length && timingSafeEqual(Buffer.from(hdr), Buffer.from(good));
+  } catch {
+    return false;
+  }
 }
 
 function vncLocalUrl(): string {
@@ -133,15 +168,48 @@ export async function buildServer(engine: Engine): Promise<void> {
       u === '/healthz' ||
       u.startsWith('/healthz?') ||
       u.startsWith('/site') ||
-      u.startsWith('/vnc')
+      u.startsWith('/vnc') ||
+      u === '/login' ||
+      u === '/api/login' ||
+      u === '/logout'
     ) {
       return;
     }
-    const hdr = String(req.headers.authorization ?? '');
-    if (!safeEqual(hdr, expectedAuthHeader())) {
-      reply.code(401).header('www-authenticate', 'Basic realm="SEM panel"');
+    if (authed(req)) return;
+    if (u.startsWith('/api/')) {
+      reply.code(401);
       return reply.send();
     }
+    return reply.redirect('/login');
+  });
+
+  app.get('/login', async (_req, reply) => {
+    try {
+      const html = await readFile(join(PUBLIC_DIR, 'login.html'), 'utf-8');
+      return reply.type('text/html').send(html);
+    } catch {
+      return reply.code(500).send('login page missing');
+    }
+  });
+
+  app.post('/api/login', async (req, reply) => {
+    const { u, p, remember } = ((req.body ?? {}) as { u?: string; p?: string; remember?: boolean }) ?? {};
+    if (u !== PANEL_USER || p !== PANEL_PASSWORD) {
+      reply.code(401);
+      return { ok: false };
+    }
+    const exp = Date.now() + (remember ? 30 : 1) * 86400000;
+    const token = `${signToken(exp)}.${exp}`;
+    reply.header(
+      'set-cookie',
+      `sem_auth=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor((exp - Date.now()) / 1000)}`
+    );
+    return { ok: true };
+  });
+
+  app.get('/logout', async (_req, reply) => {
+    reply.header('set-cookie', 'sem_auth=; Path=/; HttpOnly; Max-Age=0');
+    return reply.redirect('/login');
   });
 
   app.get('/api/status', async () => ({
@@ -208,6 +276,12 @@ export async function buildServer(engine: Engine): Promise<void> {
         : sel.listRow
           ? [sel.listRow]
           : [];
+      if (listRowC.length === 0) {
+        return {
+          ok: false,
+          reason: 'Селекторы ещё не обучены — воспользуйтесь 🎯 Режимом обучения (Настройки, выше)',
+        };
+      }
       let found = false;
       for (const rs of listRowC) {
         try {
