@@ -57,8 +57,15 @@ function parseAction(raw: string): AiAction {
 }
 
 export function normalizeBase(base?: string): string {
-  const b = String(base || '').trim().replace(/\/+$/, '');
-  return b || GEMINI_DEFAULT;
+  let b = String(base || '').trim().replace(/\/+$/, '');
+  if (!b) return GEMINI_DEFAULT;
+  if (!/^https?:\/\//i.test(b)) b = 'https://' + b;
+  /* Пользователь мог вставить полный путь — приводим к базовому. */
+  b = b.replace(/\/(chat\/completions|models(\/.*)?)$/i, '');
+  if (/generativelanguage\.googleapis\.com$/i.test(b)) b += '/v1beta';
+  if (/^https:\/\/api\.openai\.com$/i.test(b)) b += '/v1';
+  if (/^https:\/\/openrouter\.ai$/i.test(b)) b += '/api/v1';
+  return b.replace(/\/+$/, '');
 }
 
 export function isGeminiApi(base?: string): boolean {
@@ -131,7 +138,7 @@ export async function testKey(opts: {
   key: string;
   model: string;
   baseUrl?: string;
-}): Promise<{ ok: boolean; reason?: string; models?: number; modelFound?: boolean; model: string }> {
+}): Promise<{ ok: boolean; reason?: string; models?: number; modelFound?: boolean; model: string; base: string }> {
   const base = normalizeBase(opts.baseUrl);
   try {
     const url = isGeminiApi(base)
@@ -141,17 +148,33 @@ export async function testKey(opts: {
       headers: isGeminiApi(base) ? {} : { authorization: `Bearer ${opts.key}` },
       signal: AbortSignal.timeout(20000),
     });
-    if (!r.ok) return { ok: false, reason: `Сервер ответил ${r.status}`, model: opts.model };
+    if (!r.ok) {
+      const hint =
+        r.status === 404
+          ? 'проверьте Base URL (для Gemini оставьте пустым)'
+          : r.status === 401 || r.status === 403
+            ? 'ключ отклонён'
+            : '';
+      return {
+        ok: false,
+        reason: `Сервер ответил ${r.status}${hint ? ' — ' + hint : ''} · ${base}`,
+        model: opts.model,
+        base,
+      };
+    }
     const j = (await r.json()) as { models?: { name?: string }[]; data?: { id?: string }[] };
-    const names = (j.models ?? []).map((m) => String(m.name)).concat((j.data ?? []).map((m) => String(m.id)));
+    const names = (j.models ?? [])
+      .map((m) => String(m.name))
+      .concat((j.data ?? []).map((m) => String(m.id)));
     return {
       ok: true,
       models: names.length,
       modelFound: names.some((n) => n.includes(opts.model)),
       model: opts.model,
+      base,
     };
   } catch (e) {
-    return { ok: false, reason: String(e).slice(0, 140), model: opts.model };
+    return { ok: false, reason: String(e).slice(0, 140), model: opts.model, base };
   }
 }
 

@@ -55,12 +55,11 @@
 
     <div class="card accent">
       <div class="card-head"><h2>🤖 Команда агенту</h2><span class="qmark" data-help="ai">?</span></div>
-      <textarea id="aiTask" class="prompt tall" rows="4" placeholder="Например: открой список заявок и прими первую новую"></textarea>
+      <textarea id="aiTask" class="prompt xl" rows="7" placeholder="Опишите задачу подробно, например:&#10;1. Открой список заявок&#10;2. Найди новые со статусом «В обработке»&#10;3. Открой первую, нажми «Принять»&#10;4. Если появится окно подтверждения — нажми «Да»&#10;5. Вернись к списку"></textarea>
       <button class="btn primary block" id="btnAiRun">Выполнить команду</button>
       <div id="aiLive" class="ai-live"></div>
     </div>
 
-    <div class="card vnc-card" id="vncWrapMini"></div>
   </section>
 
   <!-- ======================= СТАТИСТИКА ======================= -->
@@ -101,7 +100,7 @@
     <form class="card" data-save>
       <div class="card-head"><h2>🔑 Доступ к модели</h2><span class="qmark" data-help="aikey">?</span></div>
       <div class="field">
-        <label>API-ключ</label>
+        <label>API-ключ <span class="key-state" id="keyState"></span></label>
         <input type="text" name="aiApiKey" class="mono" placeholder="AIza… или sk-…" autocomplete="off" spellcheck="false">
       </div>
       <div class="field">
@@ -116,6 +115,15 @@
           <option value="anthropic/claude-sonnet-4.5"></option>
           <option value="openai/gpt-4o"></option>
         </datalist>
+      </div>
+      <div class="field">
+        <label>Провайдер</label>
+        <div class="seg" id="provSeg">
+          <button type="button" class="seg-btn" data-base="" data-model="gemini-2.5-flash">Gemini</button>
+          <button type="button" class="seg-btn" data-base="https://api.openai.com/v1" data-model="gpt-4o">OpenAI</button>
+          <button type="button" class="seg-btn" data-base="https://openrouter.ai/api/v1" data-model="google/gemini-2.5-flash">OpenRouter</button>
+          <button type="button" class="seg-btn" data-base="custom">Свой</button>
+        </div>
       </div>
       <div class="field">
         <label>Base URL (пусто = Google Gemini)</label>

@@ -3,73 +3,80 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0b0f14">
+<meta name="theme-color" content="#0a0e14">
 <title>SEM — вход</title>
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <style>
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{margin:0;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:20px;
-  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#e7edf5;
-  background:radial-gradient(900px 500px at 50% -150px,rgba(79,140,255,.14),transparent),#0b0f14}
-.card{width:100%;max-width:380px;background:linear-gradient(180deg,#121821,#0e141d);
-  border:1px solid #1e2836;border-radius:20px;padding:28px 24px;
-  box-shadow:0 24px 70px -20px rgba(79,140,255,.35)}
-.brand{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:6px}
-.brand img{width:34px;height:34px}
-.brand b{font-size:22px;letter-spacing:.14em;
-  background:linear-gradient(90deg,#7fb0ff,#4f8cff 45%,#22c55e);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#e8eef6;
+  background:radial-gradient(900px 460px at 50% -160px,rgba(79,140,255,.13),transparent),#0a0e14}
+.card{width:100%;max-width:370px;background:linear-gradient(180deg,#121822,#0e141c);
+  border:1px solid #1d2634;border-radius:20px;padding:26px 22px;
+  box-shadow:0 22px 60px -24px rgba(79,140,255,.4)}
+.brand{display:flex;align-items:center;gap:9px;justify-content:center;margin-bottom:5px}
+.brand img{width:32px;height:32px}
+.brand b{font-size:21px;letter-spacing:.15em;
+  background:linear-gradient(90deg,#86b3ff,#4f8cff 50%,#22c55e);
   -webkit-background-clip:text;background-clip:text;color:transparent}
-.sub{text-align:center;color:#8b98a9;font-size:12.5px;margin-bottom:22px}
-label{display:block;font-size:12px;color:#8b98a9;font-weight:600;margin:14px 0 6px}
-input{width:100%;padding:12px 14px;border-radius:12px;border:1px solid #22304a;
-  background:#0c1118;color:#fff;font-size:15px;outline:none;transition:border-color .15s}
+.sub{text-align:center;color:#8794a5;font-size:12.5px;margin-bottom:20px}
+label{display:block;font-size:12px;color:#8794a5;font-weight:600;margin:0 0 6px}
+.f{margin-bottom:13px}
+input[type=text],input[type=password]{width:100%;padding:13px 14px;border-radius:12px;border:1px solid #22304a;
+  background:#0b1017;color:#fff;font-size:16px;outline:none;transition:border-color .15s;font-family:inherit}
 input:focus{border-color:#4f8cff}
-.row{display:flex;justify-content:space-between;align-items:center;margin:12px 0 18px}
-.chk{display:flex;align-items:center;gap:8px;font-size:12.5px;color:#8b98a9;cursor:pointer}
-.chk input{width:auto;accent-color:#4f8cff}
-button{width:100%;padding:13px;border:none;border-radius:12px;cursor:pointer;
-  font-size:15px;font-weight:700;color:#fff;
-  background:linear-gradient(135deg,#4f8cff,#3568e0);
-  box-shadow:0 8px 24px -8px rgba(79,140,255,.7)}
-button:active{transform:scale(.98)}
-.err{display:none;color:#ff8080;font-size:13px;margin-top:12px;text-align:center}
+.chk{display:flex;align-items:center;gap:9px;font-size:12.5px;color:#8794a5;cursor:pointer;margin:4px 0 17px}
+.chk input{width:18px;height:18px;accent-color:#4f8cff}
+button{width:100%;padding:14px;border:none;border-radius:12px;cursor:pointer;
+  font-size:15px;font-weight:700;color:#fff;font-family:inherit;
+  background:linear-gradient(135deg,#4f8cff,#3568e0);box-shadow:0 8px 22px -10px rgba(79,140,255,.85)}
+button:active{transform:scale(.985)}
+.err{display:none;color:#ff9a9a;font-size:13px;margin-top:13px;text-align:center}
 .err.show{display:block}
 </style>
 </head>
 <body>
 <div class="card">
   <div class="brand"><img src="/icon.svg" alt=""><b>SEM</b></div>
-  <div class="sub">Панель управления ботом заявок</div>
-  <form id="f">
-    <label>Логин</label>
-    <input id="u" autocomplete="username" required>
-    <label>Пароль</label>
-    <input id="p" type="password" autocomplete="current-password" required>
-    <div class="row">
-      <label class="chk"><input type="checkbox" id="r" checked> Запомнить на 30 дней</label>
+  <div class="sub">Панель управления агентом</div>
+
+  <form id="f" method="post" action="/login-form" autocomplete="on">
+    <div class="f">
+      <label for="u">Логин</label>
+      <input id="u" name="username" type="text" autocomplete="username" required>
     </div>
+    <div class="f">
+      <label for="p">Пароль</label>
+      <input id="p" name="password" type="password" autocomplete="current-password" required>
+    </div>
+    <label class="chk"><input type="checkbox" id="r" name="remember" checked> Запомнить на 30 дней</label>
     <button type="submit">Войти</button>
     <div class="err" id="e">Неверный логин или пароль</div>
   </form>
 </div>
 <script>
-document.getElementById('f').addEventListener('submit', async (ev) => {
+document.getElementById('f').addEventListener('submit', function (ev) {
   ev.preventDefault();
-  const e = document.getElementById('e');
+  var e = document.getElementById('e');
   e.classList.remove('show');
-  try {
-    const r = await fetch('/api/login', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        u: document.getElementById('u').value,
-        p: document.getElementById('p').value,
-        remember: document.getElementById('r').checked,
-      }),
-    });
-    if (r.ok) { location.href = '/'; return; }
-  } catch {}
-  e.classList.add('show');
+  fetch('/api/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({
+      u: document.getElementById('u').value,
+      p: document.getElementById('p').value,
+      remember: document.getElementById('r').checked,
+    }),
+  }).then(function (r) {
+    if (!r.ok) { e.classList.add('show'); return; }
+    /* даём браузеру шанс предложить сохранение пароля: настоящий submit формы */
+    var f = document.getElementById('f');
+    f.removeAttribute('id');
+    f.action = '/';
+    f.method = 'get';
+    f.submit();
+  }).catch(function () { e.classList.add('show'); });
 });
 </script>
 </body>

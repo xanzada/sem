@@ -159,6 +159,17 @@ async function loadSettings(force) {
   const sp = $('#speedRange');
   if (sp) { sp.value = s.speed; $('#speedVal').textContent = '×' + Number(s.speed); }
 
+  const ks = $('#keyState');
+  if (ks) {
+    ks.textContent = s.aiApiKeySet ? '· сохранён' : '· не задан';
+    ks.className = 'key-state ' + (s.aiApiKeySet ? 'ok' : 'no');
+  }
+  const keyInput = document.querySelector('input[name=aiApiKey]');
+  if (keyInput && s.aiApiKeySet && !keyInput.value) {
+    keyInput.placeholder = 'Ключ сохранён — оставьте пустым или введите новый';
+  }
+  markProvider(s.aiBaseUrl || '');
+
 }
 
 let vncLoaded = false;
@@ -168,7 +179,7 @@ async function loadVnc() {
   const html = meta.vncUrl
     ? `<iframe src="${meta.vncUrl}" allow="clipboard-read; clipboard-write"></iframe>`
     : '<div class="hint" style="padding:16px">Экран пока недоступен: noVNC не запущен.</div>';
-  ['#vncWrap', '#vncWrapMini'].forEach((id) => { const el = $(id); if (el) el.innerHTML = html; });
+  const el = $('#vncWrap'); if (el) el.innerHTML = html;
   vncLoaded = !!meta.vncUrl;
 }
 
@@ -202,6 +213,31 @@ function bindSaveForms() {
     });
   });
 }
+
+function markProvider(base) {
+  const b = String(base || '').trim();
+  const known = ['', 'https://api.openai.com/v1', 'https://openrouter.ai/api/v1'];
+  $$('#provSeg .seg-btn').forEach((btn) => {
+    const bb = btn.dataset.base;
+    const active = bb === 'custom' ? !known.includes(b) : bb === b;
+    btn.classList.toggle('on', active);
+  });
+}
+
+$$('#provSeg .seg-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const base = btn.dataset.base;
+    const baseInput = document.querySelector('input[name=aiBaseUrl]');
+    const modelInput = document.querySelector('input[name=aiModel]');
+    if (base !== 'custom') {
+      baseInput.value = base;
+      baseInput.dataset.dirty = '1';
+      if (btn.dataset.model) { modelInput.value = btn.dataset.model; modelInput.dataset.dirty = '1'; }
+    }
+    markProvider(base === 'custom' ? 'custom-x' : base);
+    if (base === 'custom') baseInput.focus();
+  });
+});
 
 /* ---------------- control ---------------- */
 async function control(cmd) {
@@ -326,8 +362,7 @@ $$('.tab').forEach((b) => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
     if (t === 'analytics') loadStats().catch(() => {});
     if (t === 'settings') { loadSettings().catch(() => {}); refreshAgent(); }
-    if (t === 'vnc') loadVnc().catch(() => {});
-    if (t === 'journal') loadJournal().catch(() => {});
+    if (t === 'vnc')     if (t === 'journal') loadJournal().catch(() => {});
   });
 });
 
@@ -343,9 +378,9 @@ $('#btnAiTest').addEventListener('click', async () => {
   out.textContent = '⏳ Проверяю ключ…';
   try {
     const r = await api('/api/ai/test', { method: 'POST' });
-    out.textContent = r.ok
-      ? `✅ Ключ работает. Модель ${r.model}: ${r.modelFound ? 'доступна' : 'не найдена — выберите другую'}`
-      : '❌ ' + (r.reason || 'Ключ не подошёл');
+    out.innerHTML = r.ok
+      ? `✅ Ключ работает · моделей: ${r.models}<br>Модель <b>${esc(r.model)}</b>: ${r.modelFound ? 'доступна' : 'не найдена в списке'}<br><span style="opacity:.65">${esc(r.base || '')}</span>`
+      : '❌ ' + esc(r.reason || 'Ключ не подошёл');
   } catch (e) { out.textContent = 'Ошибка: ' + e.message; }
 });
 
@@ -383,6 +418,5 @@ pullStatus();
 loadStats().catch(() => {});
 loadSettings(true).catch(() => {});
 refreshAgent();
-loadVnc().catch(() => {});
 setInterval(pullStatus, 12000);
 setInterval(() => { if (!document.hidden) loadStats().catch(() => {}); }, 60000);

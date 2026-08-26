@@ -127,18 +127,29 @@ export function setSettingsPatch(patch: Partial<Record<string, unknown>>): void 
   }
 }
 
-export function maskSettings(s: SemSettings): SemSettings {
-  return {
-    ...s,
-    password: s.password ? '__SAVED__' : '',
-    telegramToken: s.telegramToken ? '__SAVED__' : '',
-    aiApiKey: s.aiApiKey ? '__SAVED__' : '',
-  };
+const SECRET_KEYS = ['password', 'telegramToken', 'aiApiKey'] as const;
+
+/** Секреты наружу не отдаём: только флаг «задан ли». */
+export function maskSettings(s: SemSettings): SemSettings & Record<string, unknown> {
+  const out: Record<string, unknown> = { ...s };
+  for (const k of SECRET_KEYS) {
+    out[k] = '';
+    out[k + 'Set'] = Boolean(s[k]);
+  }
+  return out as SemSettings & Record<string, unknown>;
 }
 
-export function applySecretPlaceholders(incoming: Partial<Record<string, unknown>>, current: SemSettings): void {
-  if (incoming.password === '__SAVED__') delete incoming.password;
-  if (incoming.telegramToken === '__SAVED__') delete incoming.telegramToken;
-  if (incoming.aiApiKey === '__SAVED__') delete incoming.aiApiKey;
+/** Пустое или служебное значение секрета не должно стирать сохранённый ключ. */
+export function applySecretPlaceholders(
+  incoming: Partial<Record<string, unknown>>,
+  current: SemSettings
+): void {
+  for (const k of SECRET_KEYS) {
+    const v = incoming[k];
+    if (v === undefined) continue;
+    const str = String(v);
+    const blank = str.trim() === '' || str.includes('__SAVED__') || /^\u2022+$/.test(str.trim());
+    if (blank) delete incoming[k];
+  }
   void current;
 }

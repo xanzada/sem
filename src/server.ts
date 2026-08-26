@@ -172,7 +172,9 @@ export async function buildServer(engine: Engine): Promise<void> {
       u.startsWith('/vnc') ||
       u === '/login' ||
       u === '/api/login' ||
-      u === '/logout'
+      u === '/login-form' ||
+      u === '/logout' ||
+      u === '/icon.svg'
     ) {
       return;
     }
@@ -199,13 +201,27 @@ export async function buildServer(engine: Engine): Promise<void> {
       reply.code(401);
       return { ok: false };
     }
-    const exp = Date.now() + (remember ? 30 : 1) * 86400000;
+    const exp = Date.now() + (remember === false ? 1 : 30) * 86400000;
     const token = `${signToken(exp)}.${exp}`;
     reply.header(
       'set-cookie',
       `sem_auth=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor((exp - Date.now()) / 1000)}`
     );
     return { ok: true };
+  });
+
+  app.post('/login-form', async (req, reply) => {
+    const b = (req.body ?? {}) as Record<string, string>;
+    if (b.username !== PANEL_USER || b.password !== PANEL_PASSWORD) {
+      return reply.redirect('/login');
+    }
+    const exp = Date.now() + (b.remember ? 30 : 1) * 86400000;
+    const token = `${signToken(exp)}.${exp}`;
+    reply.header(
+      'set-cookie',
+      `sem_auth=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor((exp - Date.now()) / 1000)}`
+    );
+    return reply.redirect('/');
   });
 
   app.get('/logout', async (_req, reply) => {
