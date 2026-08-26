@@ -1,10 +1,12 @@
 import { chromium, type BrowserContext, type Page } from 'playwright';
-import { PROFILE_DIR, SHOTS_DIR, HEADLESS, NO_SANDBOX } from './config.js';
+import { PROFILE_DIR, SHOTS_DIR, HEADLESS, NO_SANDBOX, DATA_DIR } from './config.js';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 mkdirSync(PROFILE_DIR, { recursive: true });
 mkdirSync(SHOTS_DIR, { recursive: true });
+
+export const SESSION_BACKUP_PATH = join(DATA_DIR, 'session-backup.json');
 
 let ctx: BrowserContext | null = null;
 
@@ -57,4 +59,14 @@ export async function screenshot(name: string): Promise<string | null> {
 
 export function shotsDir(): string {
   return SHOTS_DIR;
+}
+
+export async function backupSession(): Promise<boolean> {
+  try {
+    const c = await getContext();
+    await c.storageState({ path: SESSION_BACKUP_PATH });
+    return true;
+  } catch {
+    return false;
+  }
 }

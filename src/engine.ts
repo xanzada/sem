@@ -2,7 +2,7 @@ import type { Page } from 'playwright';
 import { WState, STATE_META } from './states.js';
 import { getAllSettings, getSetting } from './settings.js';
 import { classifyPage, type Classification } from './classifier.js';
-import { getPage, closeBrowser, screenshot } from './browser.js';
+import { getPage, closeBrowser, screenshot, backupSession } from './browser.js';
 import { log } from './logger.js';
 import { bus } from './bus.js';
 import { tgNotify } from './telegram.js';
@@ -44,6 +44,7 @@ export class Engine {
   private driver: WorkflowDriver | null = null;
   private lastActivity = Date.now();
   private demoSeqRestored = 0;
+  private sessionBackupTimer: NodeJS.Timeout | null = null;
   private authAlerted = false;
 
   snapshot(): Snapshot {
@@ -126,6 +127,12 @@ export class Engine {
 
     this.running = true;
     this.setState(WState.RUNNING, 'Работа');
+    if (!this.sessionBackupTimer) {
+      this.sessionBackupTimer = setInterval(() => {
+        void backupSession();
+      }, 10 * 60000);
+      this.sessionBackupTimer.unref?.();
+    }
     void this.loop();
   }
 
@@ -323,10 +330,13 @@ export class Engine {
 
   private async keepalive(page: Page): Promise<void> {
     try {
+      await page.evaluate(
+        `fetch(location.href,{method:'HEAD',cache:'no-store'}).catch(()=>{})`
+      );
       await page.mouse.move(200 + Math.random() * 300, 150 + Math.random() * 200);
       await page.mouse.wheel(0, 60 + Math.random() * 80);
       await page.mouse.wheel(0, -(60 + Math.random() * 80));
-      log('info', 'SYSTEM', 'Поддержание активности сессии (без перезагрузки страницы)');
+      log('info', 'SYSTEM', 'Поддержание активности сессии (HTTP-пинг без перезагрузки)');
       this.lastActivity = Date.now();
     } catch {
       /* ignore */
@@ -388,13 +398,34 @@ export class Engine {
     const ok = simulated ? await this.simLogin() : await this.tryLogin();
     if (ok) {
       this.authAlerted = false;
-      log('success', 'AUTH', 'Вход выполнен. Продолжаю с контрольной точки.');
+      await backupSession();
+      log('success', 'AUTH', 'Вход выполнен. Сессия сохранена (backup). Продолжаю с контрольной точки.');
       this.setState(WState.RUNNING, 'Возобновление после входа');
       return;
     }
 
-    log('error', 'AUTH', 'Автоматический вход не удался. Жду оператора (панель / VNC).');
-    void tgNotify('🔐 <b>SEM</b>: не удалось войти автоматически. Требуется помощь оператора.');
+    let waitHint = 'Жду оператора (панель / VNC).';
+    try {
+      const pg = await getPage();
+      const otpish = await pg.evaluate(
+        `(() => {
+          const el = [...document.querySelectorAll('input')].find((x) =>
+            x.offsetParent &&
+            /one-time-code|sms|code|код/i.test((x.name || '') + (x.id || '') + (x.placeholder || ''))
+          );
+          const txt = document.body.innerText.slice(0, 2500);
+          return !!(el || /введите код|код из sms|смс-код/i.test(txt));
+        })()`
+      );
+      if (otpish) {
+        waitHint = 'Похоже, нужен код из SMS — введите его через VNC, бот сам продолжит.';
+      }
+    } catch {
+      /* page unavailable */
+    }
+
+    log('error', 'AUTH', `Автоматический вход не удался. ${waitHint}`);
+    void tgNotify(`🔐 <b>SEM</b>: автоматический вход не удался. ${waitHint}`);
     this.setState(WState.AUTH_REQUIRED, 'Ожидаю вход оператором');
 
     const deadline = Date.now() + 120 * 60000;
@@ -410,7 +441,8 @@ export class Engine {
       if (!page) continue;
       const cls = await classifyPage(page).catch(() => ({ kind: 'UNEXPECTED' as const, reason: '' }));
       if (cls.kind === 'NORMAL') {
-        log('success', 'AUTH', 'Обнаружен успешный вход. Возобновляю работу.');
+        log('success', 'AUTH', 'Обнаружен успешный вход. Сессия сохраняется. Возобновляю работу.');
+        await backupSession();
         this.setState(WState.RUNNING, 'Возобновление после входа');
         return;
       }
