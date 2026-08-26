@@ -163,7 +163,10 @@ const INJECT = String.raw`
   document.getElementById('sem-mode').addEventListener('click', () => setMode(window.__semMode === 'on' ? 'off' : 'on'));
   document.getElementById('sem-back').addEventListener('click', () => history.back());
   document.getElementById('sem-fwd').addEventListener('click', () => history.forward());
-  document.getElementById('sem-off').addEventListener('click', () => { if (window.__semStop) window.__semStop(); });
+  document.getElementById('sem-off').addEventListener('click', () => {
+    if (window.__semStop) window.__semStop();
+    setTimeout(() => location.reload(), 300);
+  });
 
   let last = null;
   document.addEventListener('mouseover', (e) => {
