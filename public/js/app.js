@@ -268,7 +268,7 @@ function bindUI() {
       const tab = btn.dataset.tab;
       document.querySelectorAll('.tab-page').forEach((p) => p.classList.toggle('active', p.dataset.tab === tab));
       if (tab === 'analytics') loadAnalytics().catch(() => {});
-      if (tab === 'settings') { loadSettings().catch(() => {}); loadSteps(); }
+      if (tab === 'settings') { loadSettings().catch(() => {}); loadSteps(); refreshPicks(); }
       if (tab === 'journal') loadJournal().catch(() => {});
     });
   });
@@ -349,6 +349,8 @@ function bindUI() {
     try {
       const r = await api('/api/picker/picks');
       renderPicks(r.picks || []);
+      const st = $('#pickStatus');
+      if (st) st.textContent = r.active ? '🟢 Режим активен — кликайте в VNC' : '⚪ Режим выключен';
     } catch { /* ignore */ }
   }
 
@@ -358,9 +360,10 @@ function bindUI() {
       if (!r.ok) { toast('❌ ' + (r.reason || 'Не удалось открыть')); return; }
       toast('🎯 Режим обучения включён — перейдите во вкладку VNC');
       refreshPicks();
-      if (!pickPoll) pickPoll = setInterval(refreshPicks, 4000);
-    } catch (e) { toast('Қате: ' + e.message); }
+      if (!pickPoll) pickPoll = setInterval(refreshPicks, 3000);
+    } catch (e) { toast('Ошибка: ' + e.message); }
   });
+  $('#btnPicksRefresh').addEventListener('click', refreshPicks);
   $('#btnPickReinject').addEventListener('click', async () => {
     await api('/api/picker/reinject', { method: 'POST' });
     toast('Скрипт внедрён заново');
