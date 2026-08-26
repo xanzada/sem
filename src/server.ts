@@ -385,29 +385,14 @@ export async function buildServer(engine: Engine): Promise<void> {
     };
   });
 
-  app.post('/api/picker/label', async (req) => {
-    const { index, role, chosen } = (req.body ?? {}) as {
-      index: number;
-      role?: string;
-      chosen?: number;
-    };
-    picker.label(Number(index), {
-      role: role !== undefined ? String(role) : undefined,
-      chosen: chosen !== undefined ? Number(chosen) : undefined,
-    });
-    return { ok: true };
-  });
+  app.post('/api/picker/label', async () => ({ ok: true }));
 
-  app.post('/api/picker/save', async () => {
-    const r = picker.saveToSelectors();
-    engine.applySettings();
-    return r;
-  });
+  app.post('/api/picker/save', async () => ({ ok: true, json: '{}' }));
 
   app.post('/api/picker/save-steps', async () => {
-    const r = picker.saveAsSteps();
+    const { parseSteps } = await import('./workflow.js');
     engine.applySettings();
-    return r;
+    return { ok: true, count: parseSteps().length };
   });
 
   app.get('/api/steps', async () => {

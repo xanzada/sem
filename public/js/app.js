@@ -268,7 +268,7 @@ function bindUI() {
       const tab = btn.dataset.tab;
       document.querySelectorAll('.tab-page').forEach((p) => p.classList.toggle('active', p.dataset.tab === tab));
       if (tab === 'analytics') loadAnalytics().catch(() => {});
-      if (tab === 'settings') { loadSettings().catch(() => {}); loadSteps(); refreshPicks(); }
+      if (tab === 'settings') { loadSettings().catch(() => {}); loadSteps(); refreshPickStatus(); }
       if (tab === 'journal') loadJournal().catch(() => {});
     });
   });
@@ -293,133 +293,47 @@ function bindUI() {
   $('#settingsForm').addEventListener('submit', saveSettings);
   $('#btnTestLogin').addEventListener('click', () => control('test-login'));
 
-  /* ---------- Оқыту режимі (picker) ---------- */
-  const ROLE_LABELS = {
-    ignore: '— пропустить',
-    click: '🖱 Нажать',
-    check: '👁 Проверить (ждать)',
-    accept: '✅ Принять (с защитой)',
-    back: '↩ Назад',
-    open: '🌐 Открыть URL',
-    wait: '⏳ Пауза',
-  };
+  /* ---------- Обучение бота (picker в VNC) ---------- */
   let pickPoll = null;
 
-  let lastPicksSig = '';
-
-  function candLabel(c) {
-    if (c.startsWith('#')) return 'по ID';
-    if (c.includes(':has-text(')) return 'по тексту';
-    if (/\[data-(test|action|id)/.test(c)) return 'по data-атрибуту';
-    if (c.includes('[')) return 'по атрибуту';
-    if (c.includes(' > ') || c.includes(':nth-of-type')) return 'точный путь';
-    return 'по классу';
-  }
-  function candShort(c) {
-    return c.length > 38 ? c.slice(0, 18) + '…' + c.slice(-16) : c;
-  }
-
-  function renderPicks(picks) {
-    const out = $('#picksOut');
-    const sig = JSON.stringify(picks.map((p) => [p.index, p.label, p.chosen, p.cands, p.human]));
-    const editing = out.contains(document.activeElement) && document.activeElement.tagName === 'SELECT';
-    if (sig === lastPicksSig || editing) {
-      const st = $('#pickStatus');
-      if (st) st.textContent = window.__pickActive ? '🟢 Режим активен — кликайте в VNC' : '⚪ Режим выключен';
-      return;
-    }
-    lastPicksSig = sig;
-    if (!picks.length) {
-      out.innerHTML = '<div class="hint">Пока ничего не выбрано — откройте сайт во вкладке VNC и нажимайте на элементы.</div>';
-      return;
-    }
-    out.innerHTML = '';
-    [...picks].reverse().forEach((p) => {
-      const row = document.createElement('div');
-      row.className = 'card';
-      row.style.cssText = 'padding:10px;display:flex;flex-direction:column;gap:6px';
-      const candsOpts = p.cands
-        .map((c, i) => `<option value="${i}" ${p.chosen === i ? 'selected' : ''} title="${escapeHtml(c)}">${candLabel(c)} · ${escapeHtml(candShort(c))}</option>`)
-        .join('');
-      row.innerHTML = `
-        <div style="font-size:13.5px">👆 <b>${escapeHtml(p.human || p.tag)}</b></div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <select data-pick="${p.index}" data-field="role" style="flex:1;min-width:140px">
-            ${Object.entries(ROLE_LABELS).map(([v, l]) =>
-              `<option value="${v}" ${p.label === v ? 'selected' : ''}>${l}</option>`).join('')}
-          </select>
-          <select data-pick="${p.index}" data-field="chosen" style="flex:2;min-width:180px;font-family:monospace;font-size:11px">
-            ${candsOpts}
-          </select>
-        </div>`;
-      out.appendChild(row);
-    });
-    out.querySelectorAll('select').forEach((sel) => {
-      sel.addEventListener('change', async () => {
-        const idx = Number(sel.dataset.pick);
-        const body = sel.dataset.field === 'role'
-          ? { index: idx, role: sel.value }
-          : { index: idx, chosen: Number(sel.value) };
-        sel.disabled = true;
-        try {
-          await api('/api/picker/label', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-          const r = await api('/api/picker/picks');
-          lastPicksSig = ''; // force refresh from server state
-          renderPicks(r.picks || []);
-        } catch { sel.disabled = false; }
-      });
-    });
-  }
-
-  async function refreshPicks() {
+  async function refreshPickStatus() {
     try {
       const r = await api('/api/picker/picks');
-      window.__pickActive = r.active;
-      renderPicks(r.picks || []);
       const st = $('#pickStatus');
-      if (st) st.textContent = r.active ? '🟢 Режим активен — кликайте в VNC' : '⚪ Режим выключен';
+      if (st) st.textContent = r.active
+        ? '🟢 Обучение включено — панель управления находится в VNC'
+        : '⚪ Обучение выключено';
+      if (r.active) loadSteps();
     } catch { /* ignore */ }
   }
 
   $('#btnPickStart').addEventListener('click', async () => {
     try {
-      const r = await api('/api/picker/start', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: $('#pickUrl').value }) });
+      const r = await api('/api/picker/start', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ url: $('#pickUrl').value }),
+      });
       if (!r.ok) { toast('❌ ' + (r.reason || 'Не удалось открыть')); return; }
-      toast('🎯 Режим обучения включён — перейдите во вкладку VNC');
-      refreshPicks();
-      if (!pickPoll) pickPoll = setInterval(refreshPicks, 3000);
+      toast('🎯 Готово! Откройте вкладку VNC — панель обучения уже там');
+      refreshPickStatus();
+      if (!pickPoll) pickPoll = setInterval(() => { refreshPickStatus(); }, 3000);
     } catch (e) { toast('Ошибка: ' + e.message); }
   });
-  $('#btnPicksRefresh').addEventListener('click', refreshPicks);
   $('#btnPickReinject').addEventListener('click', async () => {
     await api('/api/picker/reinject', { method: 'POST' });
-    toast('Скрипт внедрён заново');
+    toast('↻ Панель обучения обновлена в VNC');
   });
   $('#btnPickStop').addEventListener('click', async () => {
     await api('/api/picker/stop', { method: 'POST' });
     clearInterval(pickPoll); pickPoll = null;
-    toast('⏹ Режим обучения остановлен');
-  });
-  $('#btnPickSave').addEventListener('click', async () => {
-    try {
-      const r = await api('/api/picker/save', { method: 'POST' });
-      if (r.ok) { toast('✅ Селекторы сохранены'); await loadSettings(); }
-    } catch (e) { toast('Ошибка: ' + e.message); }
+    toast('✕ Обучение остановлено');
+    refreshPickStatus();
   });
 
-  $('#btnPickSaveSteps').addEventListener('click', async () => {
-    try {
-      const r = await api('/api/picker/save-steps', { method: 'POST' });
-      if (r.ok) {
-        toast(`✅ Сохранено шагов: ${r.count}`);
-        loadSteps();
-      }
-    } catch (e) { toast('Ошибка: ' + e.message); }
-  });
-
-  /* ---------- Порядок действий (steps) ---------- */
+  /* ---------- Что делает бот (шаги) ---------- */
   const ACT_ICONS = { open: '🌐', click: '🖱', check: '👁', accept: '✅', back: '↩', wait: '⏳' };
-  const ACT_NAMES = { open: 'Открыть', click: 'Нажать', check: 'Проверить', accept: 'Принять', back: 'Назад', wait: 'Пауза' };
+  const ACT_NAMES = { open: 'Открыть страницу', click: 'Нажать', check: 'Проверить', accept: 'Принять заявку', back: 'Вернуться назад', wait: 'Подождать' };
 
   async function loadSteps() {
     try {
@@ -430,21 +344,22 @@ function bindUI() {
 
   function renderSteps(steps) {
     const out = $('#stepsOut');
+    const flow = $('#stepsFlow');
     if (!steps.length) {
-      out.innerHTML = '<div class="hint">Шагов пока нет. Через «🎯 Режим обучения» кликайте элементы, задавайте действие и сохраняйте как порядок.</div>';
+      out.innerHTML = '<div class="hint">Шагов пока нет. Включите обучение и покажите боту действия в VNC — они появятся здесь.</div>';
+      flow.innerHTML = '';
       return;
     }
     out.innerHTML = '';
     steps.forEach((st, i) => {
-      const selShort = (st.sel && st.sel[0] ? st.sel[0] : '').slice(0, 46);
       const row = document.createElement('div');
       row.className = 'card';
-      row.style.cssText = 'padding:10px;display:flex;align-items:center;gap:8px';
+      row.style.cssText = 'padding:11px;display:flex;align-items:center;gap:9px';
       row.innerHTML = `
-        <div style="font-weight:900;color:var(--accent);min-width:26px;text-align:center">${i + 1}</div>
+        <div class="step-num">${i + 1}</div>
         <div style="flex:1;min-width:0">
-          <div style="font-size:13.5px">${ACT_ICONS[st.act] || '•'} <b>${ACT_NAMES[st.act] || st.act}</b> — ${escapeHtml(st.note || '')}</div>
-          ${selShort ? `<div style="font-family:monospace;font-size:10.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(selShort)}</div>` : ''}
+          <div style="font-size:14px">${ACT_ICONS[st.act] || '•'} <b>${ACT_NAMES[st.act] || st.act}</b></div>
+          <div style="font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(st.note || '')}</div>
         </div>
         <button class="btn btn-ghost btn-sm" data-mv="${i}" data-d="-1" ${i === 0 ? 'disabled' : ''}>↑</button>
         <button class="btn btn-ghost btn-sm" data-mv="${i}" data-d="1" ${i === steps.length - 1 ? 'disabled' : ''}>↓</button>
@@ -455,13 +370,16 @@ function bindUI() {
       b.addEventListener('click', () => moveStep(Number(b.dataset.mv), Number(b.dataset.d))));
     out.querySelectorAll('button[data-del]').forEach((b) =>
       b.addEventListener('click', () => delStep(Number(b.dataset.del))));
+
+    flow.innerHTML = steps.map((st, i) =>
+      `<div class="flow-item"><span class="flow-i">${i + 1}</span> ${ACT_ICONS[st.act] || '•'} ${escapeHtml((ACT_NAMES[st.act] || st.act))}${st.note ? ' · ' + escapeHtml(st.note.slice(0, 22)) : ''}</div>`
+    ).join('<div class="flow-arrow">↓</div>') + '<div class="flow-arrow">↻</div><div class="flow-item loop">Повтор с шага 1</div>';
   }
 
   async function persistSteps(steps) {
     await api('/api/steps', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ steps }) });
     renderSteps(steps);
   }
-
   async function moveStep(i, d) {
     const r = await api('/api/steps');
     const steps = r.steps || [];
@@ -470,37 +388,36 @@ function bindUI() {
     [steps[i], steps[j]] = [steps[j], steps[i]];
     await persistSteps(steps);
   }
-
   async function delStep(i) {
     const r = await api('/api/steps');
-    const steps = (r.steps || []).filter((_, idx) => idx !== i);
-    await persistSteps(steps);
+    await persistSteps((r.steps || []).filter((_, idx) => idx !== i));
   }
 
   $('#btnStepsRefresh').addEventListener('click', loadSteps);
   $('#btnStepsClear').addEventListener('click', async () => {
     await persistSteps([]);
-    toast('🗑 Порядок очищен');
+    toast('🗑 Все шаги удалены');
   });
 
   /* ---------- Помощь (?) ---------- */
   const HELP = {
-    teach: ['🎯 Режим обучения', `Научите бота кликать по сайту без программиста:<br><br>
-1. Остановите бота (⏸ или ⏹)<br>
-2. Нажмите <b>🎯 Начать</b> и перейдите во вкладку <b>VNC</b><br>
-3. Кликайте мышкой на нужные элементы сайта: строку заявки, кнопку «Принять», статус…<br>
-4. Каждый клик появится ниже — выберите для него <b>действие</b> (Нажать / Проверить / Принять…)<br>
-5. Нажмите <b>💾 Сохранить как порядок действий</b><br><br>
-Пример: кликнули строку заявки → действие «Нажать»; кликнули кнопку «Принять» → действие «Принять».`],
-    steps: ['📋 Порядок действий', `Это сценарий бота — шаги выполняются сверху вниз по очереди, затем цикл повторяется.<br><br>
-<b>↑ ↓</b> — поменять порядок шагов<br>
-<b>🗑</b> — удалить шаг<br><br>
-Пример порядка:<br>
-1. 🌐 Открыть — список заявок<br>
-2. 🖱 Нажать — строка заявки<br>
-3. ✅ Принять — кнопка «Принять»<br>
-4. 👁 Проверить — надпись «Принято»<br>
-5. ↩ Назад`],
+    teach: ['🎯 Обучение бота', `Покажите боту действия «за руку» — программист не нужен:<br><br>
+<b>1.</b> Остановите бота: ⏹ Стоп (сверху)<br>
+<b>2.</b> Нажмите <b>🎯 Начать</b><br>
+<b>3.</b> Откройте вкладку <b>VNC</b> — сверху страницы появится синяя панель<br>
+<b>4.</b> Нажмите на нужный элемент сайта → появится зелёная панель с вопросом:<br>
+&nbsp;&nbsp;• <b>✓ Просто нажать</b> — обычная кнопка, страница не меняется<br>
+&nbsp;&nbsp;• <b>→ Нажать и открыть страницу</b> — шаг сохранится И вы реально перейдёте внутрь<br>
+&nbsp;&nbsp;• <b>✅ Это «Принять заявку»</b> — главное действие, с защитой от повторов<br>
+&nbsp;&nbsp;• <b>👁 Проверить</b> — бот будет ждать появления этого элемента (например «Принято»)<br>
+<b>5.</b> Шаги сразу появятся ниже в списке. Внутри новой страницы продолжайте так же.<br>
+<b>6.</b> Кнопки <b>↩ Назад / ⤴ Вперёд</b> в панели VNC — перемещение по страницам<br>
+<b>7.</b> Закончили → <b>✕ Закончить</b>, затем ▶ Старт`],
+    steps: ['📋 Что делает бот', `Список шагов = сценарий бота. Он выполняет их сверху вниз, потом начинает заново.<br><br>
+<b>↑ ↓</b> — поменять порядок<br>
+<b>🗑</b> — удалить ошибочный шаг<br><br>
+Ниже — схема: наглядно видно, что бот делает по кругу.<br><br>
+Совет: чтобы бот не путался, когда заявки быстро меняются, добавьте после «Принять» шаг <b>👁 Проверить</b> — бот дождётся подтверждения и только потом пойдёт дальше.`],
     povedenie: ['⚙️ Поведение', `<b>Скорость ×</b> — множитель пауз. 0.5 = быстрее, 2 = медленнее и осторожнее.<br><br>
 <b>Задержка, мс</b> — базовая пауза между действиями (800 мс = как человек).<br><br>
 <b>Keep-alive, сек</b> — как часто бот «напоминает о себе» сайту, чтобы сессия не истекла. 180 сек — оптимально.`],

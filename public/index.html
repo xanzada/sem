@@ -83,33 +83,27 @@
   <!-- ===== НАСТРОЙКИ ===== -->
   <section class="tab-page" data-tab="settings">
     <div class="card form" style="margin-bottom:14px">
-      <div class="divider" style="border:none;margin-top:0;padding-top:0">🎯 Режим обучения — укажите элементы сами <span class="qmark" data-help="teach">?</span></div>
-      <div class="hint">1) Остановите бота (⏸/⏹) &nbsp;2) Перейдите во вкладку VNC и нажимайте на нужные элементы сайта &nbsp;3) Ниже задайте роль каждому элементу и сохраните.</div>
+      <div class="divider" style="border:none;margin-top:0;padding-top:0">🎯 Обучение бота <span class="qmark" data-help="teach">?</span></div>
+      <div class="hint">Покажите боту, что делать: остановите бота → «Начать» → перейдите во вкладку <b>VNC</b> → нажимайте на элементы сайта и отвечайте на вопрос в зелёной панели. Шаги появятся ниже сразу.</div>
       <div class="form-row two">
-        <div><label>Открыть URL (пусто = сайт)</label><input type="url" id="pickUrl" placeholder="https://..."></div>
+        <div><label>Начать со страницы (пусто = сайт из настроек)</label><input type="url" id="pickUrl" placeholder="https://..."></div>
         <div style="display:flex;gap:6px;align-items:flex-end">
           <button class="btn btn-primary btn-sm" id="btnPickStart">🎯 Начать</button>
-          <button class="btn btn-ghost btn-sm" id="btnPickReinject">Реинжект</button>
-          <button class="btn btn-danger btn-sm" id="btnPickStop">⏹</button>
+          <button class="btn btn-ghost btn-sm" id="btnPickReinject">↻ Панель</button>
+          <button class="btn btn-danger btn-sm" id="btnPickStop">✕ Стоп</button>
         </div>
       </div>
-      <div id="picksOut" style="margin-top:12px;display:flex;flex-direction:column;gap:8px"></div>
-      <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
-        <button class="btn btn-ghost btn-sm" id="btnPicksRefresh">↻ Обновить список</button>
-        <span class="hint" id="pickStatus"></span>
-      </div>
-      <div style="display:flex;gap:8px;margin-top:12px">
-        <button class="btn btn-primary wide" id="btnPickSaveSteps">💾 Сохранить как порядок действий</button>
-        <button class="btn btn-ghost wide" id="btnPickSave">В селекторы</button>
-      </div>
+      <div style="margin-top:10px"><span class="hint" id="pickStatus"></span></div>
     </div>
 
     <div class="card form" style="margin-bottom:14px">
-      <div class="divider" style="border:none;margin-top:0;padding-top:0">📋 Порядок действий — бот выполняет шаги по очереди <span class="qmark" data-help="steps">?</span></div>
+      <div class="divider" style="border:none;margin-top:0;padding-top:0">📋 Что делает бот (по порядку) <span class="qmark" data-help="steps">?</span></div>
       <div id="stepsOut" style="display:flex;flex-direction:column;gap:8px"></div>
-      <div style="display:flex;gap:8px;margin-top:10px">
+      <div class="section-title" style="margin:16px 4px 8px">Схема работы бота</div>
+      <div id="stepsFlow" class="flow"></div>
+      <div style="display:flex;gap:8px;margin-top:12px">
         <button class="btn btn-ghost btn-sm" id="btnStepsRefresh">↻ Обновить</button>
-        <button class="btn btn-danger btn-sm" id="btnStepsClear">🗑 Очистить всё</button>
+        <button class="btn btn-danger btn-sm" id="btnStepsClear">🗑 Удалить всё</button>
       </div>
     </div>
 

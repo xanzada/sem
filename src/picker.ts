@@ -5,169 +5,243 @@ import { log } from './logger.js';
 import type { Step } from './types.js';
 
 let active = false;
+let bindingReady = false;
 
-export interface PickItem {
-  index: number;
-  tag: string;
-  text: string;
-  cands: string[];
-  human?: string;
-  label?: string;
-  chosen?: number;
-  ts: string;
-}
-
-let picks: PickItem[] = [];
-
-const INJECT = `
+/* ------------------------------------------------------------------ *
+ * Скрипт, который живёт на странице сайта внутри VNC.
+ * Показывает панель управления сверху и панель подтверждения после клика.
+ * ------------------------------------------------------------------ */
+const INJECT = String.raw`
 (() => {
   if (window.__semPickerOn) return 'already';
   window.__semPickerOn = true;
   window.__semMode = 'on';
-  window.__semRealOnce = false;
   window.__semBypass = false;
+  window.__semSel = null;
 
-  const tb = document.createElement('div');
-  tb.id = 'sem-tb';
-  tb.innerHTML =
-    '<button id="sem-mode">🖱 Указание: ВКЛ</button>' +
-    '<button id="sem-enter">⤵ Войти внутрь</button>' +
-    '<button id="sem-back">↩ Назад</button>' +
-    '<button id="sem-fwd">⤴ Вперёд</button>' +
-    '<button id="sem-off">✕ Выключить обучение</button>' +
-    '<span id="sem-hint">Режим: клик = запомнить элемент. «Войти внутрь» → следующий клик откроет страницу.</span>';
-  const st = document.createElement('style');
-  st.textContent =
-    '#sem-tb{position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#0e141d;'+
-    'border-bottom:2px solid #4f8cff;display:flex;gap:8px;padding:8px 10px;align-items:center;'+
-    'flex-wrap:wrap;font-family:system-ui,sans-serif;font-size:13px;color:#e7edf5}'+
-    '#sem-tb button{padding:10px 14px;border-radius:10px;border:1px solid #2a3a58;'+
-    'background:#182131;color:#fff;font-size:13px;font-weight:700;cursor:pointer}'+
-    '#sem-tb button.on{background:#3568e0;border-color:#4f8cff}'+
-    '#sem-tb #sem-off{background:#3a1518;border-color:#6b2b2b;color:#ff9a9a}'+
-    '#sem-tb #sem-hint{flex-basis:100%;font-size:11px;color:#8b98a9}'+
-    'body{padding-top:56px!important}'+
-    '*{cursor:crosshair!important}.sempick-hl{outline:2px solid #ff5252!important;outline-offset:1px!important}';
-  document.head.appendChild(st);
-  document.body.appendChild(tb);
+  const style = document.createElement('style');
+  style.textContent = [
+    '#sem-bar{position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#0e141d;',
+    'border-bottom:2px solid #4f8cff;padding:8px 10px;display:flex;gap:8px;flex-wrap:wrap;',
+    'align-items:center;font-family:system-ui,sans-serif;color:#e7edf5;font-size:13px}',
+    '#sem-bar button{padding:9px 13px;border-radius:10px;border:1px solid #2a3a58;background:#182131;',
+    'color:#fff;font-size:13px;font-weight:700;cursor:pointer}',
+    '#sem-bar button.on{background:#3568e0;border-color:#4f8cff}',
+    '#sem-bar #sem-off{background:#3a1518;border-color:#6b2b2b;color:#ff9a9a}',
+    '#sem-bar .sem-note{flex-basis:100%;font-size:11.5px;color:#8b98a9}',
+    '#sem-ask{position:fixed;top:56px;left:0;right:0;z-index:2147483647;background:#12233b;',
+    'border-bottom:2px solid #22c55e;padding:10px;display:none;gap:8px;flex-wrap:wrap;',
+    'align-items:center;font-family:system-ui,sans-serif;color:#e7edf5;font-size:13px}',
+    '#sem-ask.show{display:flex}',
+    '#sem-ask b{color:#9dff c0}',
+    '#sem-ask button{padding:10px 14px;border-radius:10px;border:none;color:#fff;font-weight:800;',
+    'font-size:13px;cursor:pointer}',
+    '#sem-ask .ok{background:#22a55a}#sem-ask .go{background:#3568e0}',
+    '#sem-ask .acc{background:#0f9b6c}#sem-ask .chk{background:#8a6d1f}',
+    '#sem-ask .no{background:#3a1518;color:#ff9a9a}',
+    '#sem-ask .sem-what{flex-basis:100%;font-size:14px}',
+    '#sem-toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:2147483647;',
+    'background:#16324a;color:#dff3ff;padding:10px 16px;border-radius:12px;font-family:system-ui;',
+    'font-size:13px;display:none;border:1px solid #2f6d99}',
+    'body{padding-top:56px !important}',
+    '.sem-hl{outline:3px solid #ff5252 !important;outline-offset:1px !important}'
+  ].join('');
+  document.head.appendChild(style);
 
-  const hint = (t) => { document.getElementById('sem-hint').textContent = t; };
-  const setMode = (m) => {
-    window.__semMode = m;
-    const b = document.getElementById('sem-mode');
-    b.textContent = m === 'on' ? '🖱 Указание: ВКЛ' : '🖱 Указание: ВЫКЛ (клики работают)';
-    b.classList.toggle('on', m === 'on');
-    hint(m === 'on'
-      ? 'Режим: клик = запомнить элемент. «Войти внутрь» → следующий клик откроет страницу.'
-      : 'Клики работают как обычно. Включите «Указание», чтобы запомнить элемент.');
+  const bar = document.createElement('div');
+  bar.id = 'sem-bar';
+  bar.innerHTML = [
+    '<button id="sem-mode" class="on">🖱 Обучение: ВКЛ</button>',
+    '<button id="sem-back">↩ Назад</button>',
+    '<button id="sem-fwd">⤴ Вперёд</button>',
+    '<button id="sem-off">✕ Закончить</button>',
+    '<span class="sem-note" id="sem-note">Нажмите на элемент сайта → появится вопрос, что с ним делать.</span>'
+  ].join('');
+  document.body.appendChild(bar);
+
+  const ask = document.createElement('div');
+  ask.id = 'sem-ask';
+  ask.innerHTML = [
+    '<div class="sem-what">Выбрано: <b id="sem-what">—</b></div>',
+    '<button class="ok" id="sem-save">✓ Просто нажать</button>',
+    '<button class="go" id="sem-open">→ Нажать и открыть страницу</button>',
+    '<button class="acc" id="sem-acc">✅ Это «Принять заявку»</button>',
+    '<button class="chk" id="sem-chk">👁 Проверить, что появилось</button>',
+    '<button class="no" id="sem-cancel">✕ Отмена</button>'
+  ].join('');
+  document.body.appendChild(ask);
+
+  const toastEl = document.createElement('div');
+  toastEl.id = 'sem-toast';
+  document.body.appendChild(toastEl);
+
+  const note = (t) => { document.getElementById('sem-note').textContent = t; };
+  const toast = (t) => {
+    toastEl.textContent = t;
+    toastEl.style.display = 'block';
+    clearTimeout(window.__semT);
+    window.__semT = setTimeout(() => { toastEl.style.display = 'none'; }, 2600);
   };
-  document.getElementById('sem-mode').addEventListener('click', () => {
-    setMode(window.__semMode === 'on' ? 'off' : 'on');
-  });
-  document.getElementById('sem-enter').addEventListener('click', () => {
-    window.__semRealOnce = true;
-    hint('Теперь кликните по кнопке сайта — произойдёт НАСТОЯЩИЙ переход, и шаг сохранится.');
-  });
-  document.getElementById('sem-back').addEventListener('click', () => history.back());
-  document.getElementById('sem-fwd').addEventListener('click', () => history.forward());
-  document.getElementById('sem-off').addEventListener('click', () => {
-    if (window.__semStop) window.__semStop();
-  });
 
-  let last = null;
-  const hl = (el) => {
-    if (last) last.classList.remove('sempick-hl');
-    last = el; el.classList.add('sempick-hl');
-  };
-  const describe = (el0) => {
-    const el = (el0.closest && el0.closest('button,a,[role=button],input,select,textarea,tr,li,[onclick]')) || el0;
+  const NAMES = {BUTTON:'Кнопка',A:'Ссылка',INPUT:'Поле',SELECT:'Список',TEXTAREA:'Поле',
+    TR:'Строка',LI:'Пункт',TD:'Ячейка',DIV:'Блок',SPAN:'Элемент',H1:'Заголовок',H2:'Заголовок',IMG:'Картинка'};
+
+  const describe = (raw) => {
+    const el = (raw.closest && raw.closest('button,a,[role="button"],input,select,textarea,tr,li,[onclick]')) || raw;
     const cands = [];
-    try { if (el.id) cands.push('#' + CSS.escape(el.id)); } catch {}
-    for (const a of ['data-testid','data-test','data-action','data-id','name']) {
+    const tag = el.tagName.toLowerCase();
+    try { if (el.id) cands.push('#' + CSS.escape(el.id)); } catch (e) {}
+    ['data-testid','data-test','data-action','data-id','name','aria-label'].forEach((a) => {
       const v = el.getAttribute && el.getAttribute(a);
-      if (v) cands.push(el.tagName.toLowerCase() + '[' + a + '="' + v + '"]');
+      if (v) cands.push(tag + '[' + a + '="' + String(v).replace(/"/g,'') + '"]');
+    });
+    const txt = (el.innerText || el.value || '').trim().replace(/\s+/g, ' ').slice(0, 40);
+    if (txt && (tag === 'button' || tag === 'a' || tag === 'input')) {
+      cands.push(tag + ':has-text("' + txt.replace(/"/g, '') + '")');
     }
-    const txt = (el.innerText || el.value || '').trim().replace(/\\s+/g,' ').slice(0,40);
-    if (txt && ['BUTTON','A','INPUT'].includes(el.tagName)) {
-      cands.push(el.tagName.toLowerCase() + ':has-text("' + txt.replace(/"/g,'') + '")');
-    }
-    if (el.classList.length) {
-      cands.push(el.tagName.toLowerCase() + '.' + [...el.classList].slice(0,2).join('.'));
-    }
+    if (el.classList.length) cands.push(tag + '.' + Array.prototype.slice.call(el.classList, 0, 2).join('.'));
     let cur = el, path = [];
     while (cur && cur.tagName !== 'BODY') {
       let s = cur.tagName.toLowerCase();
-      if (cur.classList.length) s += '.' + [...cur.classList].slice(0,3).join('.');
-      const p = cur.parentElement;
-      if (p) {
-        const same = [...p.children].filter(c => c.tagName === cur.tagName);
+      if (cur.classList.length) s += '.' + Array.prototype.slice.call(cur.classList, 0, 3).join('.');
+      const par = cur.parentElement;
+      if (par) {
+        const same = Array.prototype.filter.call(par.children, (c) => c.tagName === cur.tagName);
         if (same.length > 1) s += ':nth-of-type(' + (same.indexOf(cur) + 1) + ')';
       }
-      path.unshift(s); cur = p ? p.parentElement : null;
+      path.unshift(s);
+      cur = par;
     }
     if (path.length) cands.push(path.join(' > '));
-    const names = {BUTTON:'Кнопка',A:'Ссылка',INPUT:'Поле',SELECT:'Список',TR:'Строка',DIV:'Блок',SPAN:'Элемент',LI:'Пункт',TD:'Ячейка',H1:'Заголовок'};
-    const ru = names[el.tagName] || el.tagName;
-    const human = ru + (txt ? ' «' + txt.slice(0,30) + '»' : '');
-    return { tag: el.tagName.toLowerCase(), text: txt, cands: [...new Set(cands)].slice(0,6), human: human };
+    const human = (NAMES[el.tagName] || el.tagName) + (txt ? ' «' + txt.slice(0, 30) + '»' : '');
+    return { el: el, sel: cands.filter(Boolean).slice(0, 6), human: human };
   };
-  document.addEventListener('mouseover', (e) => hl(e.target), true);
-  document.addEventListener('mouseout', () => { if (last){last.classList.remove('sempick-hl');} }, true);
+
+  const showAsk = (d) => {
+    window.__semSel = d;
+    document.getElementById('sem-what').textContent = d.human;
+    ask.classList.add('show');
+  };
+  const hideAsk = () => { ask.classList.remove('show'); window.__semSel = null; };
+
+  const send = (act) => {
+    const d = window.__semSel;
+    if (!d) return;
+    if (window.__semAddStep) window.__semAddStep({ act: act, sel: d.sel, note: d.human });
+    const label = {click:'Нажать', accept:'Принять заявку', check:'Проверить'}[act] || act;
+    toast('💾 Шаг сохранён: ' + label + ' — ' + d.human);
+    hideAsk();
+  };
+
+  document.getElementById('sem-save').addEventListener('click', () => send('click'));
+  document.getElementById('sem-acc').addEventListener('click', () => send('accept'));
+  document.getElementById('sem-chk').addEventListener('click', () => send('check'));
+  document.getElementById('sem-cancel').addEventListener('click', hideAsk);
+  document.getElementById('sem-open').addEventListener('click', () => {
+    const d = window.__semSel;
+    if (!d) return;
+    if (window.__semAddStep) window.__semAddStep({ act: 'click', sel: d.sel, note: d.human });
+    toast('💾 Шаг сохранён и открываю страницу…');
+    hideAsk();
+    window.__semBypass = true;
+    const target = d.el;
+    setTimeout(() => {
+      window.__semBypass = false;
+      try { target.click(); } catch (e) {}
+    }, 200);
+  });
+
+  const setMode = (m) => {
+    window.__semMode = m;
+    const b = document.getElementById('sem-mode');
+    b.textContent = m === 'on' ? '🖱 Обучение: ВКЛ' : '🖱 Обучение: ВЫКЛ (сайт работает обычно)';
+    b.className = m === 'on' ? 'on' : '';
+    note(m === 'on'
+      ? 'Нажмите на элемент сайта → появится вопрос, что с ним делать.'
+      : 'Клики идут на сайт как обычно. Включите обучение, чтобы записывать шаги.');
+    hideAsk();
+  };
+  document.getElementById('sem-mode').addEventListener('click', () => setMode(window.__semMode === 'on' ? 'off' : 'on'));
+  document.getElementById('sem-back').addEventListener('click', () => history.back());
+  document.getElementById('sem-fwd').addEventListener('click', () => history.forward());
+  document.getElementById('sem-off').addEventListener('click', () => { if (window.__semStop) window.__semStop(); });
+
+  let last = null;
+  document.addEventListener('mouseover', (e) => {
+    if (e.target.closest && e.target.closest('#sem-bar,#sem-ask')) return;
+    if (last) last.classList.remove('sem-hl');
+    last = e.target;
+    last.classList.add('sem-hl');
+  }, true);
+
   document.addEventListener('click', (e) => {
     if (window.__semBypass) return;
-    if (e.target.closest && e.target.closest('#sem-tb')) return;
+    if (e.target.closest && e.target.closest('#sem-bar,#sem-ask')) return;
     if (window.__semMode === 'off') return;
-    e.preventDefault(); e.stopPropagation();
-    const el0 = e.target;
-    if (window.__semRealOnce) {
-      window.__semRealOnce = false;
-      const d = describe(el0);
-      if (window.__semCapture) window.__semCapture(d);
-      hint('Переход выполняется… шаг сохранён.');
-      window.__semBypass = true;
-      setTimeout(() => {
-        window.__semBypass = false;
-        if (el0.click) el0.click();
-      }, 250);
-      return;
-    }
-    const d = describe(el0);
-    if (window.__semCapture) window.__semCapture(d);
-    return false;
+    e.preventDefault();
+    e.stopPropagation();
+    showAsk(describe(e.target));
   }, true);
+
   return 'ok';
 })()
 `;
 
-let bindingReady = false;
+/* ------------------------------------------------------------------ */
+
+function readSteps(): Step[] {
+  const raw = String(getSetting('stepsJson') || '').trim();
+  if (!raw) return [];
+  try {
+    const p = JSON.parse(raw);
+    return Array.isArray(p) ? (p as Step[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeSteps(steps: Step[]): void {
+  setSettingsPatch({ stepsJson: JSON.stringify(steps) });
+}
+
+export function addStep(d: { act?: string; sel?: string[]; note?: string }): number {
+  const steps = readSteps();
+  const act = (['click', 'accept', 'check', 'open', 'back', 'wait'] as const).includes(
+    (d.act ?? 'click') as never
+  )
+    ? (d.act as Step['act'])
+    : 'click';
+  steps.push({
+    act,
+    sel: Array.isArray(d.sel) ? d.sel.filter(Boolean).slice(0, 6) : [],
+    note: String(d.note ?? '').slice(0, 60),
+  });
+  writeSteps(steps);
+  log('info', 'CONTROL', `Обучение: шаг ${steps.length} — ${act} · ${d.note ?? ''}`);
+  return steps.length;
+}
 
 async function ensureBinding(page: Page): Promise<void> {
   if (bindingReady) return;
   try {
-    await page.exposeBinding('__semCapture', (_source, d) => {
-      capture(d as { tag: string; text: string; cands: string[]; human?: string });
+    await page.exposeBinding('__semAddStep', (_src, d) => {
+      addStep(d as { act?: string; sel?: string[]; note?: string });
     });
     await page.exposeBinding('__semStop', async () => {
       active = false;
-      log('info', 'CONTROL', 'Режим обучения остановлен со страницы (VNC)');
+      log('info', 'CONTROL', 'Обучение завершено кнопкой в VNC');
     });
   } catch {
-    /* already registered on this context */
+    /* already exposed for this context */
   }
   bindingReady = true;
 }
 
-export async function heartbeat(): Promise<void> {
-  if (!active) return;
+async function inject(page: Page): Promise<void> {
   try {
-    const p = await getPage();
-    const on = await p.evaluate('window.__semPickerOn===true').catch(() => false);
-    if (!on) {
-      await ensureBinding(p);
-      await p.evaluate(INJECT).catch(() => {});
-    }
-  } catch {
-    /* browser busy */
+    await page.evaluate(INJECT);
+  } catch (e) {
+    log('warn', 'SYSTEM', `Скрипт обучения не внедрился: ${String(e).slice(0, 90)}`);
   }
 }
 
@@ -175,29 +249,36 @@ export async function startPicker(url?: string): Promise<{ ok: boolean; url: str
   const s = getAllSettings();
   const page = await getPage();
   await ensureBinding(page);
-  await page.goto(url || s.listUrl || s.siteUrl || 'about:blank', {
-    waitUntil: 'domcontentloaded',
-    timeout: 30000,
-  });
+  const target = url || s.listUrl || s.siteUrl || 'about:blank';
+  await page.goto(target, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+  await page.waitForTimeout(1200);
   await inject(page);
   active = true;
-  log('info', 'CONTROL', 'Режим обучения включён — нажимайте на элементы сайта в VNC');
+  log('info', 'CONTROL', 'Режим обучения включён — панель управления теперь в VNC');
   return { ok: true, url: page.url() };
 }
 
-async function inject(page: Page): Promise<void> {
-  try {
-    await page.evaluate(INJECT);
-  } catch (e) {
-    log('warn', 'SYSTEM', `Скрипт обучения не внедрился: ${String(e).slice(0, 80)}`);
-  }
-}
-
-export async function reinject(): Promise<void> {
+export async function reinject(): Promise<{ ok: boolean }> {
   const page = await getPage();
   await ensureBinding(page);
-  await page.evaluate(INJECT).catch(() => {});
+  await inject(page);
   active = true;
+  return { ok: true };
+}
+
+/** Держит панель живой: после перехода на новую страницу скрипт внедряется снова. */
+export async function heartbeat(): Promise<void> {
+  if (!active) return;
+  try {
+    const page = await getPage();
+    const on = await page.evaluate('window.__semPickerOn===true').catch(() => false);
+    if (!on) {
+      await ensureBinding(page);
+      await inject(page);
+    }
+  } catch {
+    /* браузер занят */
+  }
 }
 
 export async function demoClicks(
@@ -211,111 +292,29 @@ export async function demoClicks(
     waitUntil: 'domcontentloaded',
     timeout: 30000,
   });
-  await page.waitForTimeout(2500);
-  await page.evaluate(INJECT).catch(() => {});
+  await page.waitForTimeout(2000);
+  await inject(page);
   let count = 0;
   for (const sel of selectors) {
     try {
       const el = page.locator(sel).first();
       const box = await el.boundingBox({ timeout: 5000 });
       if (!box) continue;
-      const x = box.x + box.width / 2;
-      const y = box.y + box.height / 2;
-      await page.mouse.move(x, y, { steps: 10 });
-      await page.mouse.click(x, y);
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
       count += 1;
-      await page.waitForTimeout(700);
+      await page.waitForTimeout(600);
     } catch {
-      /* skip */
+      /* пропускаем */
     }
   }
   active = true;
-  log('info', 'CONTROL', `Демо-нажатия в режиме обучения: ${count} элемент(ов)`);
   return { ok: true, count };
-}
-
-export function capture(d: {
-  tag: string;
-  text: string;
-  cands: string[];
-  human?: string;
-}): void {
-  picks.push({
-    index: picks.length,
-    tag: d.tag,
-    text: d.text,
-    cands: d.cands,
-    human: d.human,
-    ts: new Date().toISOString(),
-  });
-  if (picks.length > 60) picks.shift();
-}
-
-export function list(): PickItem[] {
-  return picks;
-}
-
-export function label(
-  index: number,
-  patch: { role?: string; chosen?: number }
-): void {
-  const p = picks[index];
-  if (!p) return;
-  if (patch.role !== undefined) p.label = patch.role;
-  if (patch.chosen !== undefined) p.chosen = patch.chosen;
-}
-
-const ROLES = ['listRow', 'openLink', 'statusPending', 'statusAccepted', 'acceptButton'] as const;
-
-const ACTS = ['click', 'check', 'accept', 'back', 'open', 'wait'] as const;
-
-export function saveAsSteps(): { ok: boolean; count: number; steps: Step[] } {
-  const labeled = picks.filter((p) => p.label && p.label !== 'ignore');
-  const steps: Step[] = [];
-  if (labeled.some((p) => (ACTS as readonly string[]).includes(p.label!))) {
-    for (const p of labeled) {
-      const act = (ACTS as readonly string[]).includes(p.label!)
-        ? (p.label as Step['act'])
-        : 'click';
-      const chosen = p.cands[p.chosen ?? 0];
-      const rest = p.cands.filter((c) => c !== chosen);
-      steps.push({
-        act,
-        sel: [chosen, ...rest].filter(Boolean),
-        note: (p.text || p.tag).slice(0, 40),
-      });
-    }
-  }
-  setSettingsPatch({ stepsJson: JSON.stringify(steps) });
-  log('info', 'CONTROL', `Порядок действий сохранён из обучения: ${steps.length} шаг(ов)`);
-  return { ok: true, count: steps.length, steps };
-}
-
-export function saveToSelectors(): { ok: boolean; json: string } {
-  const currentRaw = String(getSetting('selectorsJson') || '').trim();
-  let current: Record<string, string | string[]> = {};
-  try {
-    if (currentRaw) current = JSON.parse(currentRaw);
-  } catch {
-    /* fresh */
-  }
-  for (const role of ROLES) {
-    const items = picks.filter((p) => p.label === role && p.cands.length > 0);
-    if (items.length === 0) continue;
-    const chosenList = items.map((p) => p.cands[p.chosen ?? 0]).filter(Boolean);
-    const extra = items.flatMap((p) => p.cands.filter((c) => !chosenList.includes(c)));
-    current[role] = [...new Set([...chosenList, ...extra])];
-  }
-  const json = JSON.stringify(current, null, 2);
-  setSettingsPatch({ selectorsJson: json });
-  log('info', 'CONTROL', `Результат обучения сохранён в селекторы (${Object.keys(current).length} эл.)`);
-  return { ok: true, json };
 }
 
 export function stop(): { ok: boolean } {
   active = false;
   void getPage()
-    .then((p) => p.evaluate('window.__semPickerOn = false; location.reload();'))
+    .then((p) => p.evaluate('window.__semPickerOn=false; location.reload();'))
     .catch(() => {});
   log('info', 'CONTROL', 'Режим обучения остановлен');
   return { ok: true };
@@ -323,4 +322,8 @@ export function stop(): { ok: boolean } {
 
 export function isActive(): boolean {
   return active;
+}
+
+export function list(): [] {
+  return [];
 }

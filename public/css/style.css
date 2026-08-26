@@ -266,6 +266,26 @@ main { padding: 14px 14px calc(90px + env(safe-area-inset-bottom)); max-width: 7
 .modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 10px; }
 .modal-head b { color: #9dc0ff; }
 
+/* ---------- steps & flow ---------- */
+.step-num {
+  min-width: 28px; height: 28px; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(79,140,255,.16); color: #9dc0ff;
+  font-weight: 900; font-size: 13px; border: 1px solid rgba(79,140,255,.35);
+}
+.flow { display: flex; flex-direction: column; align-items: stretch; gap: 2px; }
+.flow-item {
+  background: #101825; border: 1px solid var(--border); border-radius: 10px;
+  padding: 9px 12px; font-size: 13px; display: flex; align-items: center; gap: 8px;
+}
+.flow-item.loop { background: rgba(34,197,94,.08); border-color: rgba(34,197,94,.3); color: #86efac; }
+.flow-i {
+  min-width: 20px; height: 20px; border-radius: 6px; background: #1d2942;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 800; color: #9dc0ff;
+}
+.flow-arrow { text-align: center; color: var(--accent); font-size: 15px; line-height: 1; }
+
 @media (min-width: 700px) {
   main { padding-top: 22px; }
   .stat-grid { grid-template-columns: repeat(4, 1fr); }

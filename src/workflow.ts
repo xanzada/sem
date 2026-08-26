@@ -44,7 +44,8 @@ async function firstVisible(page: Page, list: string[]): Promise<import('playwri
   for (const s of list) {
     try {
       const loc = page.locator(s).first();
-      if ((await loc.count()) > 0 && (await loc.isVisible())) return loc;
+      await loc.waitFor({ state: 'visible', timeout: 2500 });
+      return loc;
     } catch {
       /* try next */
     }
@@ -425,6 +426,7 @@ export class StepsDriver implements WorkflowDriver {
             }
             throw new SelectorBrokenError(`шаг ${i + 1} — ${label}`);
           }
+          await el.scrollIntoViewIfNeeded().catch(() => {});
           const appId = extractAppId(page.url());
           if (st.act === 'accept') {
             const intentId = await ctx.beginIntent(appId, 'accept');
