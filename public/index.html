@@ -108,7 +108,11 @@
         <summary>Селекторы элементов сайта (JSON)</summary>
         <div class="hint">Заполняется после анализа сайта по вашим скриншотам. Пример:
 <code>{"listRow":"table tbody tr","openLink":"a","statusPending":".status-pending","statusAccepted":".status-accepted","acceptButton":"#acceptBtn"}</code></div>
-        <textarea name="selectorsJson" rows="5" placeholder='{"listRow": "...", "acceptButton": "..."}'></textarea>
+        <textarea name="selectorsJson" rows="5" placeholder='{"listRow": ["...", "..."], "acceptButton": "..."}'></textarea>
+        <div class="form-row" style="margin-top:10px">
+          <button type="button" class="btn btn-ghost wide" id="btnSelHealth">🧪 Селекторларды сайтта тексеру</button>
+          <div id="selHealthOut" class="hint" style="margin-top:8px"></div>
+        </div>
       </details>
 
       <div class="divider">Поведение</div>

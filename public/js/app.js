@@ -292,6 +292,27 @@ function bindUI() {
   $('#settingsForm').addEventListener('submit', saveSettings);
   $('#btnTestLogin').addEventListener('click', () => control('test-login'));
 
+  $('#btnSelHealth').addEventListener('click', async () => {
+    const out = $('#selHealthOut');
+    out.textContent = '⏳ Сайтты тексеруде…';
+    try {
+      const r = await api('/api/selectors-health');
+      if (r.needsLogin) {
+        out.textContent = '⚠️ Бот сайтқа кірмеген. Алдымен ▶ Старт басып, логинделсін, сосын ⏸ Пауза жасап қайта тексеріңіз.';
+        return;
+      }
+      if (!r.ok) {
+        out.textContent = '❌ ' + (r.reason || 'Тексеру мүмкін болмады');
+        return;
+      }
+      out.innerHTML =
+        r.items.map((i) => (i.ok ? '✅ ' : '❌ ') + escapeHtml(i.key)).join('<br>') +
+        '<br><span style="opacity:.7">' + escapeHtml(r.note || '') + '</span>';
+    } catch (e) {
+      out.textContent = 'Қате: ' + e.message;
+    }
+  });
+
   document.querySelectorAll('#journalChips .chip').forEach((chip) => {
     chip.addEventListener('click', () => {
       document.querySelectorAll('#journalChips .chip').forEach((c) => c.classList.remove('active'));

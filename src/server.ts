@@ -17,6 +17,9 @@ import {
 import { analyticsSummary } from './analytics.js';
 import { latestCheckpoint } from './checkpoint.js';
 import { registerDemoSite } from './demo-site.js';
+import { getPage } from './browser.js';
+import { classifyPage } from './classifier.js';
+import { readSelectors } from './workflow.js';
 import type { Engine } from './engine.js';
 
 const PANEL_USER = process.env.PANEL_USER ?? 'admin';
@@ -178,6 +181,72 @@ export async function buildServer(engine: Engine): Promise<void> {
   });
 
   app.get('/api/analytics', async () => analyticsSummary());
+
+  app.get('/api/selectors-health', async () => {
+    const s = getAllSettings();
+    const snap = engine.snapshot();
+    if (s.mode !== 'live' || !s.siteUrl) {
+      return { ok: false, reason: 'Боевой режим және сайт адресі керек' };
+    }
+    if (snap.running && !snap.paused) {
+      return { ok: false, reason: 'Бот жұмыс істеп тұр — алдымен ⏸ Пауза басыңыз' };
+    }
+    try {
+      const page = await getPage();
+      await page.goto(s.listUrl || s.siteUrl, {
+        waitUntil: 'domcontentloaded',
+        timeout: 20000,
+      });
+      await page.waitForTimeout(1500);
+      const cls = await classifyPage(page);
+      if (cls.kind === 'AUTH') return { ok: false, needsLogin: true };
+      const sel = readSelectors();
+      const items: { key: string; ok: boolean }[] = [];
+      const listRowC = Array.isArray(sel.listRow)
+        ? sel.listRow
+        : sel.listRow
+          ? [sel.listRow]
+          : [];
+      let found = false;
+      for (const rs of listRowC) {
+        try {
+          if ((await page.locator(rs).first().count()) > 0) {
+            items.push({ key: `listRow: ${rs}`, ok: true });
+            found = true;
+            break;
+          }
+        } catch {
+          /* next */
+        }
+      }
+      if (listRowC.length > 0 && !found) items.push({ key: 'listRow', ok: false });
+      const pendC = Array.isArray(sel.statusPending)
+        ? sel.statusPending
+        : sel.statusPending
+          ? [sel.statusPending]
+          : [];
+      let pf = false;
+      for (const ps of pendC) {
+        try {
+          if ((await page.locator(ps).first().count()) > 0) {
+            pf = true;
+            break;
+          }
+        } catch {
+          /* next */
+        }
+      }
+      items.push({ key: 'statusPending', ok: pf });
+      return {
+        ok: true,
+        checkedAt: new Date().toISOString(),
+        items,
+        note: 'acceptButton / statusAccepted — деталь бетте, жұмыс кезінде тексеріледі',
+      };
+    } catch (e) {
+      return { ok: false, reason: String(e).slice(0, 140) };
+    }
+  });
 
   app.get('/api/checkpoint', async () => latestCheckpoint() ?? null);
 

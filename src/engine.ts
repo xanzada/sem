@@ -18,7 +18,7 @@ import {
   latestCheckpoint,
   resolveCheckpointsForApp,
 } from './checkpoint.js';
-import { createDemoDriver, LiveHttpDriver } from './workflow.js';
+import { createDemoDriver, LiveHttpDriver, SelectorBrokenError } from './workflow.js';
 import {
   MissingSelectorsError,
   SimulatedIncident,
@@ -297,6 +297,15 @@ export class Engine {
           continue;
         }
         if (e instanceof MissingSelectorsError) {
+          await this.manualReview(e.message);
+          continue;
+        }
+        if (e instanceof SelectorBrokenError) {
+          const shot = await screenshot(`broken-${e.key.replace(/\W+/g, '_')}`);
+          log('error', 'WORKFLOW', `Элемент сайта не найден: ${e.key}. Скриншот сохранён, заявки не трогаю.`);
+          void tgNotify(
+            `🟠 <b>SEM</b>: элемент <code>${e.key}</code> на сайте не найден.\nСайт изменился? Обновите селекторы в Настройках (без передеплоя).\nСкриншот в журнале.`
+          );
           await this.manualReview(e.message);
           continue;
         }

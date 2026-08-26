@@ -21,11 +21,34 @@ import {
 } from './types.js';
 
 interface Selectors {
-  listRow?: string;
-  openLink?: string;
-  statusPending?: string;
-  statusAccepted?: string;
-  acceptButton?: string;
+  listRow?: string | string[];
+  openLink?: string | string[];
+  statusPending?: string | string[];
+  statusAccepted?: string | string[];
+  acceptButton?: string | string[];
+}
+
+export class SelectorBrokenError extends Error {
+  constructor(public key: string) {
+    super(`Элемент сайтта табылмады: ${key}. Настройки → Селекторы жаңартыңыз.`);
+  }
+}
+
+function cands(v?: string | string[]): string[] {
+  if (v == null || v === '') return [];
+  return Array.isArray(v) ? v : [v];
+}
+
+async function firstVisible(page: Page, list: string[]): Promise<import('playwright').Locator | null> {
+  for (const s of list) {
+    try {
+      const loc = page.locator(s).first();
+      if ((await loc.count()) > 0 && (await loc.isVisible())) return loc;
+    } catch {
+      /* try next */
+    }
+  }
+  return null;
 }
 
 const DEFAULT_DEMO_SELECTORS: Selectors = {
@@ -36,7 +59,7 @@ const DEFAULT_DEMO_SELECTORS: Selectors = {
   acceptButton: '#acceptBtn',
 };
 
-function readSelectors(): Selectors {
+export function readSelectors(): Selectors {
   const raw = String(getSetting('selectorsJson') || '').trim();
   if (!raw) return { ...DEFAULT_DEMO_SELECTORS };
   try {
@@ -48,10 +71,10 @@ function readSelectors(): Selectors {
   }
 }
 
-function requireSelector(sel: Selectors, key: keyof Selectors): string {
-  const v = sel[key];
-  if (!v) throw new MissingSelectorsError();
-  return v;
+function requireCands(sel: Selectors, key: keyof Selectors): string[] {
+  const c = cands(sel[key]);
+  if (c.length === 0) throw new SelectorBrokenError(String(key));
+  return c;
 }
 
 export class DemoDriver implements WorkflowDriver {
@@ -213,19 +236,44 @@ export class LiveHttpDriver implements WorkflowDriver {
       return;
     }
 
-    let rowSel = requireSelector(sel, 'listRow');
-    if (sel.statusPending && !rowSel.includes(':has(')) {
-      rowSel = `${rowSel}:has(${sel.statusPending})`;
+    let row: import('playwright').Locator | null = null;
+    let fallbackRow: import('playwright').Locator | null = null;
+    const pendFirst = cands(sel.statusPending)[0];
+    for (const rs of requireCands(sel, 'listRow')) {
+      try {
+        const plain = page.locator(rs).first();
+        if (!fallbackRow && (await plain.count()) > 0) fallbackRow = plain;
+        if (pendFirst) {
+          const filtered = page.locator(`${rs}:has(${pendFirst})`).first();
+          if ((await filtered.count()) > 0) {
+            row = filtered;
+            break;
+          }
+        }
+      } catch {
+        /* next candidate */
+      }
     }
-    const row = page.locator(rowSel).first();
-    if ((await row.count()) === 0) {
+    row = row ?? fallbackRow;
+    if (!row) {
       ctx.log('info', 'WORKFLOW', 'Свободных заявок в обработке нет — ожидаю новых');
       await ctx.delay(3);
       return;
     }
 
-    const openSel = sel.openLink ? row.locator(sel.openLink) : row;
-    await openSel.first().click();
+    let openTarget = row;
+    for (const oc of requireCands(sel, 'openLink')) {
+      try {
+        const inner = row.locator(oc).first();
+        if ((await inner.count()) > 0) {
+          openTarget = inner;
+          break;
+        }
+      } catch {
+        /* next */
+      }
+    }
+    await openTarget.first().click();
     await ctx.delay(1.5);
 
     const url = page.url();
@@ -252,18 +300,34 @@ export class LiveHttpDriver implements WorkflowDriver {
       return;
     }
 
-    const pendingSel = requireSelector(sel, 'statusPending');
-    const isPending = await page.locator(pendingSel).first().isVisible().catch(() => false);
+    let isPending = false;
+    for (const ps of requireCands(sel, 'statusPending')) {
+      try {
+        if (await page.locator(ps).first().isVisible()) {
+          isPending = true;
+          break;
+        }
+      } catch {
+        /* next */
+      }
+    }
     if (!isPending) {
-      const accSel = sel.statusAccepted;
-      const isAccepted = accSel
-        ? await page.locator(accSel).first().isVisible().catch(() => false)
-        : false;
+      let isAccepted = false;
+      for (const as of cands(sel.statusAccepted)) {
+        try {
+          if (await page.locator(as).first().isVisible()) {
+            isAccepted = true;
+            break;
+          }
+        } catch {
+          /* next */
+        }
+      }
       if (isAccepted) {
         ctx.log('info', 'WORKFLOW', `Заявка #${appId} уже принята — пропускаю`);
         return;
       }
-      throw new Error(`Заявка #${appId}: ожидаемый статус не найден`);
+      throw new SelectorBrokenError('statusPending / statusAccepted');
     }
 
     const startedAt = Date.now();
@@ -276,16 +340,25 @@ export class LiveHttpDriver implements WorkflowDriver {
       lastStatus: 'pending',
     });
 
-    const btnSel = requireSelector(sel, 'acceptButton');
+    const btnCands = requireCands(sel, 'acceptButton');
     ctx.setStep(`Нажатие «Принять» для #${appId}`);
-    await page.locator(btnSel).first().click();
+    const btn = await firstVisible(page, btnCands);
+    if (!btn) throw new SelectorBrokenError('acceptButton');
+    await btn.click();
     await ctx.delay(1);
 
-    const accSel2 = sel.statusAccepted ?? pendingSel;
-    const confirmed = !(await page.locator(accSel2).first().isVisible().catch(() => false)) ||
-      (sel.statusAccepted
-        ? await page.locator(sel.statusAccepted).first().isVisible().catch(() => false)
-        : true);
+    let confirmed = false;
+    for (const as of cands(sel.statusAccepted)) {
+      try {
+        if (await page.locator(as).first().isVisible()) {
+          confirmed = true;
+          break;
+        }
+      } catch {
+        /* next */
+      }
+    }
+    if (cands(sel.statusAccepted).length === 0) confirmed = true;
     if (!confirmed) {
       await ctx.failIntent(intentId, 'Статус не изменился после нажатия');
       throw new Error(`Заявка #${appId}: подтверждение принятия не найдено`);
