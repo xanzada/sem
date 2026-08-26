@@ -305,8 +305,30 @@ function bindUI() {
   };
   let pickPoll = null;
 
+  let lastPicksSig = '';
+
+  function candLabel(c) {
+    if (c.startsWith('#')) return 'по ID';
+    if (c.includes(':has-text(')) return 'по тексту';
+    if (/\[data-(test|action|id)/.test(c)) return 'по data-атрибуту';
+    if (c.includes('[')) return 'по атрибуту';
+    if (c.includes(' > ') || c.includes(':nth-of-type')) return 'точный путь';
+    return 'по классу';
+  }
+  function candShort(c) {
+    return c.length > 38 ? c.slice(0, 18) + '…' + c.slice(-16) : c;
+  }
+
   function renderPicks(picks) {
     const out = $('#picksOut');
+    const sig = JSON.stringify(picks.map((p) => [p.index, p.label, p.chosen, p.cands, p.human]));
+    const editing = out.contains(document.activeElement) && document.activeElement.tagName === 'SELECT';
+    if (sig === lastPicksSig || editing) {
+      const st = $('#pickStatus');
+      if (st) st.textContent = window.__pickActive ? '🟢 Режим активен — кликайте в VNC' : '⚪ Режим выключен';
+      return;
+    }
+    lastPicksSig = sig;
     if (!picks.length) {
       out.innerHTML = '<div class="hint">Пока ничего не выбрано — откройте сайт во вкладке VNC и нажимайте на элементы.</div>';
       return;
@@ -317,10 +339,10 @@ function bindUI() {
       row.className = 'card';
       row.style.cssText = 'padding:10px;display:flex;flex-direction:column;gap:6px';
       const candsOpts = p.cands
-        .map((c, i) => `<option value="${i}" ${p.chosen === i ? 'selected' : ''}>${escapeHtml(c)}</option>`)
+        .map((c, i) => `<option value="${i}" ${p.chosen === i ? 'selected' : ''} title="${escapeHtml(c)}">${candLabel(c)} · ${escapeHtml(candShort(c))}</option>`)
         .join('');
       row.innerHTML = `
-        <div style="font-size:13px"><b>&lt;${escapeHtml(p.tag)}&gt;</b> ${escapeHtml(p.text || '(без текста)')}</div>
+        <div style="font-size:13.5px">👆 <b>${escapeHtml(p.human || p.tag)}</b></div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           <select data-pick="${p.index}" data-field="role" style="flex:1;min-width:140px">
             ${Object.entries(ROLE_LABELS).map(([v, l]) =>
@@ -335,12 +357,16 @@ function bindUI() {
     out.querySelectorAll('select').forEach((sel) => {
       sel.addEventListener('change', async () => {
         const idx = Number(sel.dataset.pick);
-        if (sel.dataset.field === 'role') {
-          await api('/api/picker/label', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ index: idx, role: sel.value }) });
-        } else {
-          await api('/api/picker/label', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ index: idx, role: 'pending-label', chosen: Number(sel.value) }) });
-          await api('/api/picker/label', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ index: idx, role: picks.find((x) => x.index === idx)?.label || 'ignore' }) });
-        }
+        const body = sel.dataset.field === 'role'
+          ? { index: idx, role: sel.value }
+          : { index: idx, chosen: Number(sel.value) };
+        sel.disabled = true;
+        try {
+          await api('/api/picker/label', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+          const r = await api('/api/picker/picks');
+          lastPicksSig = ''; // force refresh from server state
+          renderPicks(r.picks || []);
+        } catch { sel.disabled = false; }
       });
     });
   }
@@ -348,6 +374,7 @@ function bindUI() {
   async function refreshPicks() {
     try {
       const r = await api('/api/picker/picks');
+      window.__pickActive = r.active;
       renderPicks(r.picks || []);
       const st = $('#pickStatus');
       if (st) st.textContent = r.active ? '🟢 Режим активен — кликайте в VNC' : '⚪ Режим выключен';

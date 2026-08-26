@@ -385,10 +385,13 @@ export async function buildServer(engine: Engine): Promise<void> {
   app.post('/api/picker/label', async (req) => {
     const { index, role, chosen } = (req.body ?? {}) as {
       index: number;
-      role: string;
+      role?: string;
       chosen?: number;
     };
-    picker.label(Number(index), String(role), chosen != null ? Number(chosen) : undefined);
+    picker.label(Number(index), {
+      role: role !== undefined ? String(role) : undefined,
+      chosen: chosen !== undefined ? Number(chosen) : undefined,
+    });
     return { ok: true };
   });
 

@@ -11,6 +11,7 @@ export interface PickItem {
   tag: string;
   text: string;
   cands: string[];
+  human?: string;
   label?: string;
   chosen?: number;
   ts: string;
@@ -30,12 +31,20 @@ const INJECT = `
     if (last) last.classList.remove('sempick-hl');
     last = el; el.classList.add('sempick-hl');
   };
-  const describe = (el) => {
+  const describe = (el0) => {
+    const el = (el0.closest && el0.closest('button,a,[role=button],input,select,textarea,tr,li,[onclick]')) || el0;
     const cands = [];
     try { if (el.id) cands.push('#' + CSS.escape(el.id)); } catch {}
     for (const a of ['data-testid','data-test','data-action','data-id','name']) {
       const v = el.getAttribute && el.getAttribute(a);
       if (v) cands.push(el.tagName.toLowerCase() + '[' + a + '="' + v + '"]');
+    }
+    const txt = (el.innerText || el.value || '').trim().replace(/\\s+/g,' ').slice(0,40);
+    if (txt && ['BUTTON','A','INPUT'].includes(el.tagName)) {
+      cands.push(el.tagName.toLowerCase() + ':has-text("' + txt.replace(/"/g,'') + '")');
+    }
+    if (el.classList.length) {
+      cands.push(el.tagName.toLowerCase() + '.' + [...el.classList].slice(0,2).join('.'));
     }
     let cur = el, path = [];
     while (cur && cur.tagName !== 'BODY') {
@@ -49,11 +58,10 @@ const INJECT = `
       path.unshift(s); cur = p ? p.parentElement : null;
     }
     if (path.length) cands.push(path.join(' > '));
-    const txt = (el.innerText || el.value || '').trim().replace(/\\s+/g,' ').slice(0,40);
-    if (txt && ['BUTTON','A','SPAN','DIV','INPUT'].includes(el.tagName)) {
-      cands.push(el.tagName.toLowerCase() + ':has-text("' + txt.replace(/"/g,'') + '")');
-    }
-    return { tag: el.tagName.toLowerCase(), text: txt, cands: [...new Set(cands)].slice(0,6) };
+    const names = {BUTTON:'Кнопка',A:'Ссылка',INPUT:'Поле',SELECT:'Список',TR:'Строка',DIV:'Блок',SPAN:'Элемент',LI:'Пункт',TD:'Ячейка',H1:'Заголовок'};
+    const ru = names[el.tagName] || el.tagName;
+    const human = ru + (txt ? ' «' + txt.slice(0,30) + '»' : '');
+    return { tag: el.tagName.toLowerCase(), text: txt, cands: [...new Set(cands)].slice(0,6), human: human };
   };
   document.addEventListener('mouseover', (e) => hl(e.target), true);
   document.addEventListener('mouseout', () => { if (last){last.classList.remove('sempick-hl');} }, true);
@@ -144,10 +152,18 @@ export async function demoClicks(
   return { ok: true, count };
 }
 
-export function capture(d: { tag: string; text: string; cands: string[] }): void {
+export function capture(d: {
+  tag: string;
+  text: string;
+  cands: string[];
+  human?: string;
+}): void {
   picks.push({
     index: picks.length,
-    ...d,
+    tag: d.tag,
+    text: d.text,
+    cands: d.cands,
+    human: d.human,
     ts: new Date().toISOString(),
   });
   if (picks.length > 60) picks.shift();
@@ -157,11 +173,14 @@ export function list(): PickItem[] {
   return picks;
 }
 
-export function label(index: number, role: string, chosen?: number): void {
+export function label(
+  index: number,
+  patch: { role?: string; chosen?: number }
+): void {
   const p = picks[index];
   if (!p) return;
-  p.label = role;
-  p.chosen = chosen ?? 0;
+  if (patch.role !== undefined) p.label = patch.role;
+  if (patch.chosen !== undefined) p.chosen = patch.chosen;
 }
 
 const ROLES = ['listRow', 'openLink', 'statusPending', 'statusAccepted', 'acceptButton'] as const;
