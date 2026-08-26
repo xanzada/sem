@@ -23,9 +23,57 @@ const INJECT = `
 (() => {
   if (window.__semPickerOn) return 'already';
   window.__semPickerOn = true;
+  window.__semMode = 'on';
+  window.__semRealOnce = false;
+  window.__semBypass = false;
+
+  const tb = document.createElement('div');
+  tb.id = 'sem-tb';
+  tb.innerHTML =
+    '<button id="sem-mode">🖱 Указание: ВКЛ</button>' +
+    '<button id="sem-enter">⤵ Войти внутрь</button>' +
+    '<button id="sem-back">↩ Назад</button>' +
+    '<button id="sem-fwd">⤴ Вперёд</button>' +
+    '<button id="sem-off">✕ Выключить обучение</button>' +
+    '<span id="sem-hint">Режим: клик = запомнить элемент. «Войти внутрь» → следующий клик откроет страницу.</span>';
   const st = document.createElement('style');
-  st.textContent = '*{cursor:crosshair!important}.sempick-hl{outline:2px solid #ff5252!important;outline-offset:1px!important}';
+  st.textContent =
+    '#sem-tb{position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#0e141d;'+
+    'border-bottom:2px solid #4f8cff;display:flex;gap:8px;padding:8px 10px;align-items:center;'+
+    'flex-wrap:wrap;font-family:system-ui,sans-serif;font-size:13px;color:#e7edf5}'+
+    '#sem-tb button{padding:10px 14px;border-radius:10px;border:1px solid #2a3a58;'+
+    'background:#182131;color:#fff;font-size:13px;font-weight:700;cursor:pointer}'+
+    '#sem-tb button.on{background:#3568e0;border-color:#4f8cff}'+
+    '#sem-tb #sem-off{background:#3a1518;border-color:#6b2b2b;color:#ff9a9a}'+
+    '#sem-tb #sem-hint{flex-basis:100%;font-size:11px;color:#8b98a9}'+
+    'body{padding-top:56px!important}'+
+    '*{cursor:crosshair!important}.sempick-hl{outline:2px solid #ff5252!important;outline-offset:1px!important}';
   document.head.appendChild(st);
+  document.body.appendChild(tb);
+
+  const hint = (t) => { document.getElementById('sem-hint').textContent = t; };
+  const setMode = (m) => {
+    window.__semMode = m;
+    const b = document.getElementById('sem-mode');
+    b.textContent = m === 'on' ? '🖱 Указание: ВКЛ' : '🖱 Указание: ВЫКЛ (клики работают)';
+    b.classList.toggle('on', m === 'on');
+    hint(m === 'on'
+      ? 'Режим: клик = запомнить элемент. «Войти внутрь» → следующий клик откроет страницу.'
+      : 'Клики работают как обычно. Включите «Указание», чтобы запомнить элемент.');
+  };
+  document.getElementById('sem-mode').addEventListener('click', () => {
+    setMode(window.__semMode === 'on' ? 'off' : 'on');
+  });
+  document.getElementById('sem-enter').addEventListener('click', () => {
+    window.__semRealOnce = true;
+    hint('Теперь кликните по кнопке сайта — произойдёт НАСТОЯЩИЙ переход, и шаг сохранится.');
+  });
+  document.getElementById('sem-back').addEventListener('click', () => history.back());
+  document.getElementById('sem-fwd').addEventListener('click', () => history.forward());
+  document.getElementById('sem-off').addEventListener('click', () => {
+    if (window.__semStop) window.__semStop();
+  });
+
   let last = null;
   const hl = (el) => {
     if (last) last.classList.remove('sempick-hl');
@@ -66,8 +114,24 @@ const INJECT = `
   document.addEventListener('mouseover', (e) => hl(e.target), true);
   document.addEventListener('mouseout', () => { if (last){last.classList.remove('sempick-hl');} }, true);
   document.addEventListener('click', (e) => {
+    if (window.__semBypass) return;
+    if (e.target.closest && e.target.closest('#sem-tb')) return;
+    if (window.__semMode === 'off') return;
     e.preventDefault(); e.stopPropagation();
-    const d = describe(e.target);
+    const el0 = e.target;
+    if (window.__semRealOnce) {
+      window.__semRealOnce = false;
+      const d = describe(el0);
+      if (window.__semCapture) window.__semCapture(d);
+      hint('Переход выполняется… шаг сохранён.');
+      window.__semBypass = true;
+      setTimeout(() => {
+        window.__semBypass = false;
+        if (el0.click) el0.click();
+      }, 250);
+      return;
+    }
+    const d = describe(el0);
     if (window.__semCapture) window.__semCapture(d);
     return false;
   }, true);
@@ -81,12 +145,30 @@ async function ensureBinding(page: Page): Promise<void> {
   if (bindingReady) return;
   try {
     await page.exposeBinding('__semCapture', (_source, d) => {
-      capture(d as { tag: string; text: string; cands: string[] });
+      capture(d as { tag: string; text: string; cands: string[]; human?: string });
+    });
+    await page.exposeBinding('__semStop', async () => {
+      active = false;
+      log('info', 'CONTROL', 'Режим обучения остановлен со страницы (VNC)');
     });
   } catch {
     /* already registered on this context */
   }
   bindingReady = true;
+}
+
+export async function heartbeat(): Promise<void> {
+  if (!active) return;
+  try {
+    const p = await getPage();
+    const on = await p.evaluate('window.__semPickerOn===true').catch(() => false);
+    if (!on) {
+      await ensureBinding(p);
+      await p.evaluate(INJECT).catch(() => {});
+    }
+  } catch {
+    /* browser busy */
+  }
 }
 
 export async function startPicker(url?: string): Promise<{ ok: boolean; url: string }> {

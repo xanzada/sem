@@ -13,6 +13,7 @@ let ctx: BrowserContext | null = null;
 const LAUNCH_ARGS = [
   '--disable-blink-features=AutomationControlled',
   '--no-first-run',
+  '--hide-crash-restore-bubble',
   '--no-sandbox',
   '--disable-dev-shm-usage',
 ];

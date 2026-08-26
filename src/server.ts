@@ -377,10 +377,13 @@ export async function buildServer(engine: Engine): Promise<void> {
     return picker.demoClicks(url, Array.isArray(selectors) ? selectors : []);
   });
 
-  app.get('/api/picker/picks', async () => ({
-    active: picker.isActive(),
-    picks: picker.list(),
-  }));
+  app.get('/api/picker/picks', async () => {
+    await picker.heartbeat();
+    return {
+      active: picker.isActive(),
+      picks: picker.list(),
+    };
+  });
 
   app.post('/api/picker/label', async (req) => {
     const { index, role, chosen } = (req.body ?? {}) as {
