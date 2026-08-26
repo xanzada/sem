@@ -472,4 +472,11 @@ export async function buildServer(engine: Engine): Promise<void> {
   });
 
   await app.listen({ port: PORT, host: HOST });
+
+  /* Пока идёт обучение — сервер сам держит панель на текущей странице VNC
+     (после каждого перехода на новую страницу скрипт внедряется заново). */
+  const hb = setInterval(() => {
+    void picker.heartbeat();
+  }, 2000);
+  hb.unref?.();
 }

@@ -354,13 +354,18 @@ function bindUI() {
     steps.forEach((st, i) => {
       const row = document.createElement('div');
       row.className = 'card';
-      row.style.cssText = 'padding:11px;display:flex;align-items:center;gap:9px';
+      row.style.cssText = 'padding:11px;display:flex;align-items:center;gap:9px;flex-wrap:wrap';
+      const acts = [
+        ['click', '🖱 Нажать'], ['accept', '✅ Принять'], ['check', '👁 Проверить'],
+        ['open', '🌐 Открыть'], ['back', '↩ Назад'], ['wait', '⏳ Подождать'],
+      ];
+      const actSel = `<select class="act-sel" data-act="${i}" style="padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:#0c1118;color:var(--text);font-size:12px">${acts.map(([v, l]) => `<option value="${v}" ${st.act === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
       row.innerHTML = `
         <div class="step-num">${i + 1}</div>
         <div style="flex:1;min-width:0">
-          <div style="font-size:14px">${ACT_ICONS[st.act] || '•'} <b>${ACT_NAMES[st.act] || st.act}</b></div>
-          <div style="font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(st.note || '')}</div>
+          <div style="font-size:14px">${ACT_ICONS[st.act] || '•'} <b>${escapeHtml(st.note || ACT_NAMES[st.act] || st.act)}</b></div>
         </div>
+        ${actSel}
         <button class="btn btn-ghost btn-sm" data-mv="${i}" data-d="-1" ${i === 0 ? 'disabled' : ''}>↑</button>
         <button class="btn btn-ghost btn-sm" data-mv="${i}" data-d="1" ${i === steps.length - 1 ? 'disabled' : ''}>↓</button>
         <button class="btn btn-danger btn-sm" data-del="${i}">🗑</button>`;
@@ -370,6 +375,13 @@ function bindUI() {
       b.addEventListener('click', () => moveStep(Number(b.dataset.mv), Number(b.dataset.d))));
     out.querySelectorAll('button[data-del]').forEach((b) =>
       b.addEventListener('click', () => delStep(Number(b.dataset.del))));
+    out.querySelectorAll('select.act-sel').forEach((sel) =>
+      sel.addEventListener('change', async () => {
+        const r2 = await api('/api/steps');
+        const arr = r2.steps || [];
+        const idx = Number(sel.dataset.act);
+        if (arr[idx]) { arr[idx].act = sel.value; await persistSteps(arr); }
+      }));
 
     flow.innerHTML = steps.map((st, i) =>
       `<div class="flow-item"><span class="flow-i">${i + 1}</span> ${ACT_ICONS[st.act] || '•'} ${escapeHtml((ACT_NAMES[st.act] || st.act))}${st.note ? ' · ' + escapeHtml(st.note.slice(0, 22)) : ''}</div>`
