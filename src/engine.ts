@@ -136,8 +136,8 @@ export class Engine {
 
     if (!simulation && aiMode) {
       if (!String(s.aiApiKey || '')) {
-        this.setState(WState.ERROR, 'Введите Gemini API Key (Настройки → ИИ-агент)');
-        log('error', 'CONTROL', 'Запуск невозможен: нет Gemini API Key');
+        this.setState(WState.ERROR, 'Не задан API-ключ модели (Настройки → Доступ к модели)');
+        log('error', 'CONTROL', 'Запуск невозможен: нет API-ключа модели');
         return;
       }
       if (!String(s.aiInstruction || '').trim()) {

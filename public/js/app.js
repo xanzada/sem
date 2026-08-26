@@ -42,14 +42,19 @@ function dur(sec) {
 }
 
 /* ---------------- status ---------------- */
+function setText(sel, val) {
+  const el = $(sel);
+  if (el && el.textContent !== String(val)) el.textContent = val;
+}
+
 function renderStatus() {
   if (!snap) return;
   const color = COLORS[snap.state] || '#6b7280';
   const live = snap.state === 'RUNNING' || snap.state === 'STARTING';
 
-  $('#stateRu').textContent = snap.emoji + ' ' + snap.stateRu;
-  $('#stateSub').textContent = snap.paused && snap.running
-    ? 'На паузе' : (live ? 'В работе · ' + dur(snap.uptimeSec) : 'Ожидание команды');
+  setText('#stateRu', snap.emoji + ' ' + snap.stateRu);
+  setText('#stateSub', snap.paused && snap.running
+    ? 'На паузе' : (live ? 'В работе · ' + dur(snap.uptimeSec) : 'Ожидание команды'));
 
   $('#bigOrb').classList.toggle('live', live);
   $('#brandOrb').classList.toggle('live', live);
@@ -58,11 +63,9 @@ function renderStatus() {
     el.style.borderColor = color;
   });
 
-  $('#modeBadge').textContent =
-    snap.mode === 'ai' ? 'ИИ-АГЕНТ' : snap.mode === 'simulation' ? 'ДЕМО' : 'БОЕВОЙ';
-
-  $('#kToday').textContent = snap.processedToday;
-  $('#kUp').textContent = live ? dur(snap.uptimeSec) : '—';
+  setText('#modeBadge', snap.mode === 'ai' ? 'ИИ-АГЕНТ' : snap.mode === 'simulation' ? 'ДЕМО' : 'БОЕВОЙ');
+  setText('#kToday', snap.processedToday);
+  setText('#kUp', live ? dur(snap.uptimeSec) : '—');
 
   $('#btnStart').disabled = snap.running && !snap.paused;
   $('#btnPause').disabled = !snap.running;
@@ -87,20 +90,11 @@ function feedRow(it) {
   return d;
 }
 function pushFeed(it) {
-  const f = $('#feed');
-  f.prepend(feedRow(it));
-  while (f.children.length > 120) f.lastChild.remove();
-  if (!journalCat || it.category === journalCat) {
-    const j = $('#journalFeed');
-    j.prepend(feedRow(it));
-    while (j.children.length > 250) j.lastChild.remove();
-  }
-}
-async function loadFeed() {
-  const items = await api('/api/events?limit=60');
-  const f = $('#feed');
-  f.innerHTML = '';
-  items.forEach((it) => f.appendChild(feedRow(it)));
+  if (journalCat && it.category !== journalCat) return;
+  const j = $('#journalFeed');
+  if (!j) return;
+  j.prepend(feedRow(it));
+  while (j.children.length > 250) j.lastChild.remove();
 }
 async function loadJournal() {
   const q = journalCat ? `?category=${journalCat}&limit=200` : '?limit=200';
@@ -117,8 +111,8 @@ async function loadStats() {
   $('#stWeek').textContent = a.week;
   $('#stTotal').textContent = a.total;
   $('#stAvg').textContent = a.avgDurationMs ? (a.avgDurationMs / 1000).toFixed(1) + ' с' : '—';
-  $('#kWeek').textContent = a.week;
-  $('#kAi').textContent = a.aiToday ?? 0;
+  setText('#kWeek', a.week);
+  setText('#kAi', a.aiToday ?? 0);
 
   const tb = $('#recentBody');
   tb.innerHTML = '';
@@ -133,6 +127,8 @@ async function loadStats() {
 
   const labels = a.series24h.map((p) => p.hour.slice(11, 16));
   const data = a.series24h.map((p) => p.count);
+  const sig = labels.join(',') + '|' + data.join(',');
+  if (chart && chart.__sig === sig) return;
   if (chart) chart.destroy();
   chart = new Chart($('#chart24').getContext('2d'), {
     type: 'bar',
@@ -146,14 +142,16 @@ async function loadStats() {
       },
     },
   });
+  chart.__sig = sig;
 }
 
 /* ---------------- settings ---------------- */
-async function loadSettings() {
+async function loadSettings(force) {
   const s = await api('/api/settings');
   $$('form[data-save]').forEach((form) => {
     Array.from(form.elements).forEach((el) => {
       if (!el.name || !(el.name in s)) return;
+      if (!force && (el === document.activeElement || el.dataset.dirty === '1')) return;
       if (el.type === 'checkbox') el.checked = s[el.name] === true || s[el.name] === 'true';
       else el.value = s[el.name] ?? '';
     });
@@ -161,15 +159,25 @@ async function loadSettings() {
   const sp = $('#speedRange');
   if (sp) { sp.value = s.speed; $('#speedVal').textContent = '×' + Number(s.speed); }
 
-  const meta = await api('/api/meta');
-  const w = $('#vncWrap');
-  w.innerHTML = meta.vncUrl
+}
+
+let vncLoaded = false;
+async function loadVnc() {
+  if (vncLoaded) return;
+  const meta = await api('/api/meta').catch(() => ({}));
+  const html = meta.vncUrl
     ? `<iframe src="${meta.vncUrl}" allow="clipboard-read; clipboard-write"></iframe>`
-    : '<div class="hint">Экран пока недоступен: noVNC не запущен в контейнере.</div>';
+    : '<div class="hint" style="padding:16px">Экран пока недоступен: noVNC не запущен.</div>';
+  ['#vncWrap', '#vncWrapMini'].forEach((id) => { const el = $(id); if (el) el.innerHTML = html; });
+  vncLoaded = !!meta.vncUrl;
 }
 
 function bindSaveForms() {
   $$('form[data-save]').forEach((form) => {
+    Array.from(form.elements).forEach((el) => {
+      if (!el.name) return;
+      el.addEventListener('input', () => { el.dataset.dirty = '1'; });
+    });
     form.addEventListener('submit', async (ev) => {
       ev.preventDefault();
       const patch = {};
@@ -186,7 +194,8 @@ function bindSaveForms() {
           body: JSON.stringify(patch),
         });
         toast('✅ Сохранено');
-        await loadSettings();
+        Array.from(form.elements).forEach((el) => { el.dataset.dirty = ''; });
+        await loadSettings(true);
         pullStatus();
       } catch (e) { toast('Ошибка: ' + e.message); }
       btn.disabled = false; btn.textContent = old;
@@ -215,7 +224,7 @@ function renderAgent(st) {
       ${st.step ? `<span class="ai-step">шаг ${st.step}</span>` : ''}</div>
     ${st.task ? `<div class="ai-task">🎯 ${esc(st.task)}</div>` : ''}
     ${st.lastAction ? `<div class="ai-act">${esc(st.lastAction)}</div>` : ''}`;
-  ['#aiLive', '#qLive'].forEach((id) => { const el = $(id); if (el) el.innerHTML = html; });
+  const el = $('#aiLive'); if (el) el.innerHTML = html;
 }
 async function refreshAgent() {
   try { renderAgent(await api('/api/ai/state')); } catch { /* ignore */ }
@@ -236,8 +245,7 @@ async function runTask(inputSel, btnSel) {
     else toast('⚠️ ' + (r.reason || 'Не завершено'));
   } catch (e) { toast('Ошибка: ' + e.message); }
   btn.disabled = false; btn.textContent = old;
-  refreshAgent(); loadStats().catch(() => {}); loadFeed().catch(() => {});
-}
+  refreshAgent(); loadStats().catch(() => {}); }
 
 /* ---------------- help ---------------- */
 const HELP = {
@@ -248,11 +256,18 @@ const HELP = {
 • <i>«Найди заявку №184, нажми Принять и подтверди в окне»</i><br><br>
 Ниже кнопки видно каждый шаг агента, а во вкладке <b>Экран</b> — картинку браузера.<br><br>
 Нужен ключ Gemini — см. карточку «Доступ к Gemini».`],
-  aikey: ['🔑 Ключ Gemini', `1. Откройте <b>aistudio.google.com/apikey</b><br>
+  aikey: ['🔑 Доступ к модели', `<b>Google Gemini (по умолчанию):</b><br>
+1. Откройте <b>aistudio.google.com/apikey</b><br>
 2. Войдите Google-аккаунтом<br>
 3. «Create API key» → скопируйте (начинается на <code>AIza…</code>)<br>
 4. Вставьте здесь → <b>Сохранить</b> → <b>Проверить ключ</b><br><br>
-Ключ хранится только на вашем сервере. Модель <b>gemini-2.0-flash</b> — оптимальна по цене и скорости.`],
+5. Base URL оставьте пустым<br><br>
+<b>Другой провайдер</b> (OpenRouter, свой прокси, локальная модель):<br>
+• Base URL: <code>https://openrouter.ai/api/v1</code><br>
+• Модель: <code>google/gemini-2.5-flash</code> или <code>anthropic/claude-sonnet-4.5</code><br>
+• Ключ: ваш <code>sk-…</code><br><br>
+Модель нужно выбирать <b>с поддержкой картинок</b> (vision) — агент работает по скриншоту.
+Название пишите точно как у провайдера. Ключ хранится только на вашем сервере.`],
   loop: ['♻️ Постоянная работа', `Чтобы агент работал сам, без ваших команд:<br><br>
 1. Напишите инструкцию — что проверять и что делать<br>
 2. Режим = <b>🤖 ИИ-агент</b><br>
@@ -311,6 +326,7 @@ $$('.tab').forEach((b) => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
     if (t === 'analytics') loadStats().catch(() => {});
     if (t === 'settings') { loadSettings().catch(() => {}); refreshAgent(); }
+    if (t === 'vnc') loadVnc().catch(() => {});
     if (t === 'journal') loadJournal().catch(() => {});
   });
 });
@@ -320,7 +336,6 @@ $('#btnStop').addEventListener('click', () => control('stop'));
 $('#btnPause').addEventListener('click', () => control(snap && snap.paused ? 'resume' : 'pause'));
 $('#btnLogout').addEventListener('click', () => { location.href = '/logout'; });
 
-$('#btnQRun').addEventListener('click', () => runTask('#qTask', '#btnQRun'));
 $('#btnAiRun').addEventListener('click', () => runTask('#aiTask', '#btnAiRun'));
 
 $('#btnAiTest').addEventListener('click', async () => {
@@ -365,9 +380,9 @@ $('#helpModal').addEventListener('click', (e) => {
 bindSaveForms();
 connectWs();
 pullStatus();
-loadFeed().catch(() => {});
 loadStats().catch(() => {});
-loadSettings().catch(() => {});
+loadSettings(true).catch(() => {});
 refreshAgent();
-setInterval(pullStatus, 10000);
-setInterval(() => { if ($('.page[data-tab=panel]').classList.contains('active')) loadStats().catch(() => {}); }, 30000);
+loadVnc().catch(() => {});
+setInterval(pullStatus, 12000);
+setInterval(() => { if (!document.hidden) loadStats().catch(() => {}); }, 60000);

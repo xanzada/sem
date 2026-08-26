@@ -53,7 +53,7 @@ export async function runAiTask(task: string, maxSteps = 25): Promise<{
   reason?: string;
 }> {
   const s = getAllSettings();
-  if (!s.aiApiKey) return { ok: false, reason: 'Нет Gemini API Key (Настройки → ИИ-агент)' };
+  if (!s.aiApiKey) return { ok: false, reason: 'Не задан API-ключ модели (Настройки → Доступ к модели)' };
   if (!task.trim()) return { ok: false, reason: 'Пустая команда' };
   if (current.running) return { ok: false, reason: 'Агент уже работает' };
 
@@ -76,6 +76,7 @@ export async function runAiTask(task: string, maxSteps = 25): Promise<{
       page,
       key: String(s.aiApiKey),
       model: String(s.aiModel || 'gemini-2.0-flash'),
+      baseUrl: String(s.aiBaseUrl || ''),
       task,
       maxSteps,
       onAction: async (a, step) => {

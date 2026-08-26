@@ -53,20 +53,14 @@
       <div class="card kpi"><div class="kpi-num" id="kUp">—</div><div class="kpi-cap">В работе</div></div>
     </div>
 
-    <div class="card">
-      <div class="card-head">
-        <h2>🚀 Быстрая команда</h2>
-        <span class="qmark" data-help="ai">?</span>
-      </div>
-      <textarea id="qTask" class="prompt" rows="3" placeholder="Например: открой список заявок и прими первую новую"></textarea>
-      <button class="btn primary block" id="btnQRun">Выполнить</button>
-      <div id="qLive" class="ai-live"></div>
+    <div class="card accent">
+      <div class="card-head"><h2>🤖 Команда агенту</h2><span class="qmark" data-help="ai">?</span></div>
+      <textarea id="aiTask" class="prompt tall" rows="4" placeholder="Например: открой список заявок и прими первую новую"></textarea>
+      <button class="btn primary block" id="btnAiRun">Выполнить команду</button>
+      <div id="aiLive" class="ai-live"></div>
     </div>
 
-    <div class="card">
-      <div class="card-head"><h2>📡 Живая лента</h2></div>
-      <div class="feed" id="feed"></div>
-    </div>
+    <div class="card vnc-card" id="vncWrapMini"></div>
   </section>
 
   <!-- ======================= СТАТИСТИКА ======================= -->
@@ -103,30 +97,29 @@
   <!-- ======================= НАСТРОЙКИ ======================= -->
   <section class="page" data-tab="settings">
 
-    <!-- 1. Команда агенту -->
-    <div class="card accent">
-      <div class="card-head"><h2>🤖 Команда агенту</h2><span class="qmark" data-help="ai">?</span></div>
-      <p class="hint">Агент видит экран браузера и сам нажимает нужные кнопки. Пишите обычными словами.</p>
-      <textarea id="aiTask" class="prompt tall" rows="4" placeholder="Открой список заявок и прими первую новую заявку"></textarea>
-      <button class="btn primary block" id="btnAiRun">Выполнить команду</button>
-      <div id="aiLive" class="ai-live"></div>
-    </div>
-
     <!-- 2. Ключ -->
     <form class="card" data-save>
-      <div class="card-head"><h2>🔑 Доступ к Gemini</h2><span class="qmark" data-help="aikey">?</span></div>
+      <div class="card-head"><h2>🔑 Доступ к модели</h2><span class="qmark" data-help="aikey">?</span></div>
       <div class="field">
         <label>API-ключ</label>
-        <input type="password" name="aiApiKey" placeholder="AIza…" autocomplete="new-password">
+        <input type="text" name="aiApiKey" class="mono" placeholder="AIza… или sk-…" autocomplete="off" spellcheck="false">
       </div>
       <div class="field">
-        <label>Модель</label>
-        <select name="aiModel">
-          <option value="gemini-2.0-flash">gemini-2.0-flash — быстрая, дешёвая</option>
-          <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite — минимум затрат</option>
-          <option value="gemini-2.5-flash">gemini-2.5-flash — умнее</option>
-          <option value="gemini-2.5-pro">gemini-2.5-pro — максимум</option>
-        </select>
+        <label>Модель (пишите точное название)</label>
+        <input type="text" name="aiModel" class="mono" list="modelList" placeholder="gemini-2.5-flash" autocomplete="off" spellcheck="false">
+        <datalist id="modelList">
+          <option value="gemini-2.5-flash"></option>
+          <option value="gemini-2.5-pro"></option>
+          <option value="gemini-2.0-flash"></option>
+          <option value="gemini-flash-latest"></option>
+          <option value="google/gemini-2.5-flash"></option>
+          <option value="anthropic/claude-sonnet-4.5"></option>
+          <option value="openai/gpt-4o"></option>
+        </datalist>
+      </div>
+      <div class="field">
+        <label>Base URL (пусто = Google Gemini)</label>
+        <input type="text" name="aiBaseUrl" class="mono" placeholder="https://openrouter.ai/api/v1" autocomplete="off" spellcheck="false">
       </div>
       <div class="btn-col">
         <button type="submit" class="btn primary block">Сохранить</button>
@@ -226,11 +219,7 @@
 
   <!-- ======================= VNC ======================= -->
   <section class="page" data-tab="vnc">
-    <div class="card">
-      <div class="card-head"><h2>🖥 Экран бота</h2></div>
-      <p class="hint">Здесь вы видите тот же браузер, в котором работает агент.</p>
-    </div>
-    <div class="card vnc-card" id="vncWrap"></div>
+    <div class="card vnc-card full" id="vncWrap"></div>
   </section>
 </main>
 

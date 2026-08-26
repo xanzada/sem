@@ -79,7 +79,7 @@ function authed(req: any): boolean {
 function vncLocalUrl(): string {
   if (NOVNC_PUBLIC_URL) return NOVNC_PUBLIC_URL;
   if (process.env.SEM_VNC_LOCAL === '1') {
-    return '/vnc/vnc.html?autoconnect=1&resize=scale&path=vnc/websockify';
+    return '/vnc/vnc.html?autoconnect=1&resize=remote&reconnect=1&reconnect_delay=1500&show_dot=1&path=vnc/websockify';
   }
   return '';
 }
@@ -436,24 +436,13 @@ export async function buildServer(engine: Engine): Promise<void> {
 
   app.post('/api/ai/test', async () => {
     const s = getAllSettings();
-    if (!s.aiApiKey) return { ok: false, reason: 'Ключ не задан' };
-    try {
-      const r = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(String(s.aiApiKey))}`,
-        { signal: AbortSignal.timeout(15000) }
-      );
-      if (!r.ok) return { ok: false, reason: `Google ответил ${r.status}` };
-      const j = (await r.json()) as { models?: { name?: string }[] };
-      const has = (j.models ?? []).some((m) => String(m.name).includes(String(s.aiModel)));
-      return {
-        ok: true,
-        models: (j.models ?? []).length,
-        modelFound: has,
-        model: String(s.aiModel),
-      };
-    } catch (e) {
-      return { ok: false, reason: String(e).slice(0, 120) };
-    }
+    if (!s.aiApiKey) return { ok: false, reason: 'Ключ не задан', model: String(s.aiModel) };
+    const { testKey } = await import('./gemini.js');
+    return testKey({
+      key: String(s.aiApiKey),
+      model: String(s.aiModel),
+      baseUrl: String(s.aiBaseUrl || ''),
+    });
   });
 
   app.post('/api/control', async (req, reply) => {

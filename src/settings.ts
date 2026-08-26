@@ -9,6 +9,7 @@ export interface SemSettings {
   loginSelectorsJson: string;
   aiApiKey: string;
   aiModel: string;
+  aiBaseUrl: string;
   aiInstruction: string;
   selectorsJson: string;
   stepsJson: string;
@@ -34,6 +35,7 @@ export const DEFAULT_SETTINGS: SemSettings = {
   loginSelectorsJson: '',
   aiApiKey: '',
   aiModel: 'gemini-2.0-flash',
+  aiBaseUrl: '',
   aiInstruction: '',
   selectorsJson: '',
   stepsJson: '',
@@ -61,6 +63,7 @@ const ENV_KEYS: Partial<Record<keyof SemSettings, string>> = {
   loginSelectorsJson: 'LOGIN_SELECTORS_JSON',
   aiApiKey: 'AI_API_KEY',
   aiModel: 'AI_MODEL',
+  aiBaseUrl: 'AI_BASE_URL',
   aiInstruction: 'AI_INSTRUCTION',
   selectorsJson: 'SELECTORS_JSON',
   stepsJson: 'STEPS_JSON',

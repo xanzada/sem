@@ -23,7 +23,8 @@ export async function getContext(): Promise<BrowserContext> {
   ctx = await chromium.launchPersistentContext(PROFILE_DIR, {
     headless: HEADLESS,
     args: NO_SANDBOX ? LAUNCH_ARGS : LAUNCH_ARGS.slice(0, 2),
-    viewport: null,
+    viewport: { width: 1280, height: 760 },
+    screen: { width: 1280, height: 800 },
     ignoreHTTPSErrors: true,
   });
   return ctx;
