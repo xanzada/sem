@@ -12,7 +12,7 @@ const SECURITY_RE =
   /(just a moment|проверка браузера|проверка безопасности|verify you are human|attention required|checking your browser|ddos-guard|captcha-delivery|cf-challenge|challenge-platform|__cf_chl|turnstile|подтвердите, что вы не робот)/i;
 
 const AUTH_TEXT_RE =
-  /(вход в систему|авторизац|введите логин|войти в аккаунт|sign in to|log in to|forgot your password|забыли пароль)/i;
+  /(вход в систему|авторизац|введите логин|войти в аккаунт|войти в кабинет|безопасный вход|sign in to|log in to|forgot your password|забыли пароль)/i;
 
 export async function classifyPage(page: Page): Promise<Classification> {
   const siteUrl = String(getSetting('siteUrl') || '').replace(/\/+$/, '');
