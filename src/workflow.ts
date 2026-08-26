@@ -534,7 +534,7 @@ export class AiLoopDriver implements WorkflowDriver {
 
     if (!r.ok) {
       ctx.log('warn', 'WORKFLOW', `ИИ-агент: ${r.reason ?? 'ошибка'}`);
-      await ctx.delay(6);
+      await ctx.delay(20);
       return;
     }
     if (r.done) {
