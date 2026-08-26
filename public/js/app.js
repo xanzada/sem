@@ -268,7 +268,7 @@ function bindUI() {
       const tab = btn.dataset.tab;
       document.querySelectorAll('.tab-page').forEach((p) => p.classList.toggle('active', p.dataset.tab === tab));
       if (tab === 'analytics') loadAnalytics().catch(() => {});
-      if (tab === 'settings') loadSettings().catch(() => {});
+      if (tab === 'settings') { loadSettings().catch(() => {}); loadSteps(); }
       if (tab === 'journal') loadJournal().catch(() => {});
     });
   });
@@ -294,12 +294,13 @@ function bindUI() {
 
   /* ---------- Оқыту режимі (picker) ---------- */
   const ROLE_LABELS = {
-    ignore: '— не задано',
-    listRow: '📋 Строка заявки',
-    openLink: '🔗 Ссылка открытия',
-    statusPending: '🟡 Статус: в обработке',
-    statusAccepted: '🟢 Статус: принята',
-    acceptButton: '✅ Кнопка Принять',
+    ignore: '— пропустить',
+    click: '🖱 Нажать',
+    check: '👁 Проверить (ждать)',
+    accept: '✅ Принять (с защитой)',
+    back: '↩ Назад',
+    open: '🌐 Открыть URL',
+    wait: '⏳ Пауза',
   };
   let pickPoll = null;
 
@@ -371,8 +372,84 @@ function bindUI() {
   $('#btnPickSave').addEventListener('click', async () => {
     try {
       const r = await api('/api/picker/save', { method: 'POST' });
-      if (r.ok) { toast('✅ Селекторлар сақталды'); await loadSettings(); }
-    } catch (e) { toast('Қате: ' + e.message); }
+      if (r.ok) { toast('✅ Селекторы сохранены'); await loadSettings(); }
+    } catch (e) { toast('Ошибка: ' + e.message); }
+  });
+
+  $('#btnPickSaveSteps').addEventListener('click', async () => {
+    try {
+      const r = await api('/api/picker/save-steps', { method: 'POST' });
+      if (r.ok) {
+        toast(`✅ Сохранено шагов: ${r.count}`);
+        loadSteps();
+      }
+    } catch (e) { toast('Ошибка: ' + e.message); }
+  });
+
+  /* ---------- Порядок действий (steps) ---------- */
+  const ACT_ICONS = { open: '🌐', click: '🖱', check: '👁', accept: '✅', back: '↩', wait: '⏳' };
+  const ACT_NAMES = { open: 'Открыть', click: 'Нажать', check: 'Проверить', accept: 'Принять', back: 'Назад', wait: 'Пауза' };
+
+  async function loadSteps() {
+    try {
+      const r = await api('/api/steps');
+      renderSteps(r.steps || []);
+    } catch { /* ignore */ }
+  }
+
+  function renderSteps(steps) {
+    const out = $('#stepsOut');
+    if (!steps.length) {
+      out.innerHTML = '<div class="hint">Шагов пока нет. Через «🎯 Режим обучения» кликайте элементы, задавайте действие и сохраняйте как порядок.</div>';
+      return;
+    }
+    out.innerHTML = '';
+    steps.forEach((st, i) => {
+      const selShort = (st.sel && st.sel[0] ? st.sel[0] : '').slice(0, 46);
+      const row = document.createElement('div');
+      row.className = 'card';
+      row.style.cssText = 'padding:10px;display:flex;align-items:center;gap:8px';
+      row.innerHTML = `
+        <div style="font-weight:900;color:var(--accent);min-width:26px;text-align:center">${i + 1}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13.5px">${ACT_ICONS[st.act] || '•'} <b>${ACT_NAMES[st.act] || st.act}</b> — ${escapeHtml(st.note || '')}</div>
+          ${selShort ? `<div style="font-family:monospace;font-size:10.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(selShort)}</div>` : ''}
+        </div>
+        <button class="btn btn-ghost btn-sm" data-mv="${i}" data-d="-1" ${i === 0 ? 'disabled' : ''}>↑</button>
+        <button class="btn btn-ghost btn-sm" data-mv="${i}" data-d="1" ${i === steps.length - 1 ? 'disabled' : ''}>↓</button>
+        <button class="btn btn-danger btn-sm" data-del="${i}">🗑</button>`;
+      out.appendChild(row);
+    });
+    out.querySelectorAll('button[data-mv]').forEach((b) =>
+      b.addEventListener('click', () => moveStep(Number(b.dataset.mv), Number(b.dataset.d))));
+    out.querySelectorAll('button[data-del]').forEach((b) =>
+      b.addEventListener('click', () => delStep(Number(b.dataset.del))));
+  }
+
+  async function persistSteps(steps) {
+    await api('/api/steps', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ steps }) });
+    renderSteps(steps);
+  }
+
+  async function moveStep(i, d) {
+    const r = await api('/api/steps');
+    const steps = r.steps || [];
+    const j = i + d;
+    if (j < 0 || j >= steps.length) return;
+    [steps[i], steps[j]] = [steps[j], steps[i]];
+    await persistSteps(steps);
+  }
+
+  async function delStep(i) {
+    const r = await api('/api/steps');
+    const steps = (r.steps || []).filter((_, idx) => idx !== i);
+    await persistSteps(steps);
+  }
+
+  $('#btnStepsRefresh').addEventListener('click', loadSteps);
+  $('#btnStepsClear').addEventListener('click', async () => {
+    await persistSteps([]);
+    toast('🗑 Порядок очищен');
   });
 
   $('#btnSelHealth').addEventListener('click', async () => {

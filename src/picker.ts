@@ -2,6 +2,7 @@ import type { Page } from 'playwright';
 import { getPage } from './browser.js';
 import { getAllSettings, setSettingsPatch, getSetting } from './settings.js';
 import { log } from './logger.js';
+import type { Step } from './types.js';
 
 let active = false;
 
@@ -164,6 +165,30 @@ export function label(index: number, role: string, chosen?: number): void {
 }
 
 const ROLES = ['listRow', 'openLink', 'statusPending', 'statusAccepted', 'acceptButton'] as const;
+
+const ACTS = ['click', 'check', 'accept', 'back', 'open', 'wait'] as const;
+
+export function saveAsSteps(): { ok: boolean; count: number; steps: Step[] } {
+  const labeled = picks.filter((p) => p.label && p.label !== 'ignore');
+  const steps: Step[] = [];
+  if (labeled.some((p) => (ACTS as readonly string[]).includes(p.label!))) {
+    for (const p of labeled) {
+      const act = (ACTS as readonly string[]).includes(p.label!)
+        ? (p.label as Step['act'])
+        : 'click';
+      const chosen = p.cands[p.chosen ?? 0];
+      const rest = p.cands.filter((c) => c !== chosen);
+      steps.push({
+        act,
+        sel: [chosen, ...rest].filter(Boolean),
+        note: (p.text || p.tag).slice(0, 40),
+      });
+    }
+  }
+  setSettingsPatch({ stepsJson: JSON.stringify(steps) });
+  log('info', 'CONTROL', `Порядок действий сохранён: ${steps.length} шаг(ов)`);
+  return { ok: true, count: steps.length, steps };
+}
 
 export function saveToSelectors(): { ok: boolean; json: string } {
   const currentRaw = String(getSetting('selectorsJson') || '').trim();

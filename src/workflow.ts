@@ -17,6 +17,7 @@ import {
   MissingSelectorsError,
   SimulatedIncident,
   type DriverCtx,
+  type Step,
   type WorkflowDriver,
 } from './types.js';
 
@@ -386,3 +387,124 @@ export class LiveHttpDriver implements WorkflowDriver {
 }
 
 export { failIntent };
+
+export class StepsDriver implements WorkflowDriver {
+  name = 'steps';
+  private pendingAccept: { id: string; appId: string } | null = null;
+
+  async cycle(ctx: DriverCtx): Promise<void> {
+    const steps = parseSteps();
+    if (steps.length === 0) throw new MissingSelectorsError();
+    const page = ctx.page;
+
+    for (let i = 0; i < steps.length; i++) {
+      const st = steps[i];
+      const label = st.note || st.act;
+      ctx.setStep(`Шаг ${i + 1}/${steps.length}: ${label}`);
+      ctx.log('info', 'WORKFLOW', `Шаг ${i + 1}/${steps.length}: ${label}`);
+
+      switch (st.act) {
+        case 'open': {
+          const s = getAllSettings();
+          await page.goto(st.url || s.listUrl || s.siteUrl, {
+            waitUntil: 'domcontentloaded',
+            timeout: 30000,
+          });
+          await ctx.delay(1);
+          break;
+        }
+        case 'click':
+        case 'accept': {
+          const el = await firstVisible(page, st.sel ?? []);
+          if (!el) throw new SelectorBrokenError(`шаг ${i + 1} — ${label}`);
+          const appId = extractAppId(page.url());
+          if (st.act === 'accept') {
+            const intentId = await ctx.beginIntent(appId, 'accept');
+            this.pendingAccept = { id: intentId, appId };
+            await ctx.saveCheckpoint({
+              appId,
+              step: `step${i + 1}`,
+              nextAction: 'accept',
+              url: page.url(),
+              lastStatus: 'pending',
+            });
+          }
+          await el.click();
+          await ctx.delay(1);
+          break;
+        }
+        case 'check': {
+          let okFlag = false;
+          for (let t = 0; t < 10; t++) {
+            if (await firstVisible(page, st.sel ?? [])) {
+              okFlag = true;
+              break;
+            }
+            await sleep(1000);
+          }
+          if (!okFlag) {
+            if (this.pendingAccept) {
+              await ctx.failIntent(this.pendingAccept.id, `проверка шага ${i + 1} не прошла`);
+              this.pendingAccept = null;
+            }
+            throw new SelectorBrokenError(`шаг ${i + 1} — ${label} (не дождались)`);
+          }
+          if (this.pendingAccept) {
+            await ctx.confirmIntent(this.pendingAccept.id);
+            await ctx.recordApplication({
+              appId: this.pendingAccept.appId,
+              result: 'accepted',
+              durationMs: 0,
+            });
+            ctx.log(
+              'success',
+              'WORKFLOW',
+              `Заявка #${this.pendingAccept.appId} принята ✅ (подтверждено шагом ${i + 1})`
+            );
+            if (getSetting('evidenceShots')) await ctx.shot?.(`accepted-${this.pendingAccept.appId}`);
+            this.pendingAccept = null;
+          }
+          break;
+        }
+        case 'back':
+          await page.goBack().catch(() => {});
+          await ctx.delay(1);
+          break;
+        case 'wait':
+          await sleep((st.sec ?? 2) * 1000);
+          break;
+      }
+    }
+
+    if (this.pendingAccept) {
+      await ctx.confirmIntent(this.pendingAccept.id);
+      await ctx.recordApplication({
+        appId: this.pendingAccept.appId,
+        result: 'accepted',
+        durationMs: 0,
+      });
+      ctx.log('success', 'WORKFLOW', `Заявка #${this.pendingAccept.appId} принята ✅`);
+      this.pendingAccept = null;
+    }
+  }
+}
+
+function extractAppId(url: string): string {
+  const m = url.match(/(\d+)\/?(?:[?#].*)?$/);
+  return m ? m[1] : url.slice(-40);
+}
+
+export function parseSteps(): Step[] {
+  const raw = String(getSetting('stepsJson') || '').trim();
+  if (!raw) return [];
+  try {
+    const p = JSON.parse(raw) as unknown;
+    if (Array.isArray(p)) return p as Step[];
+    if (p && typeof p === 'object' && Array.isArray((p as { steps?: unknown }).steps)) {
+      return (p as { steps: Step[] }).steps;
+    }
+  } catch {
+    /* bad json */
+  }
+  return [];
+}

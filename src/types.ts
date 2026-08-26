@@ -63,3 +63,11 @@ export class MissingSelectorsError extends Error {
     super('Не заданы селекторы сайта (Настройки → Селекторы)');
   }
 }
+
+export interface Step {
+  act: 'open' | 'click' | 'check' | 'accept' | 'back' | 'wait';
+  sel?: string[];
+  url?: string;
+  sec?: number;
+  note?: string;
+}

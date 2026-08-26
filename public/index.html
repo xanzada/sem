@@ -93,7 +93,19 @@
         </div>
       </div>
       <div id="picksOut" style="margin-top:12px;display:flex;flex-direction:column;gap:8px"></div>
-      <button class="btn btn-primary wide" id="btnPickSave" style="margin-top:12px">💾 Сохранить отмеченное в селекторы</button>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn btn-primary wide" id="btnPickSaveSteps">💾 Сохранить как порядок действий</button>
+        <button class="btn btn-ghost wide" id="btnPickSave">В селекторы</button>
+      </div>
+    </div>
+
+    <div class="card form" style="margin-bottom:14px">
+      <div class="divider" style="border:none;margin-top:0;padding-top:0">📋 Порядок действий — бот выполняет шаги по очереди</div>
+      <div id="stepsOut" style="display:flex;flex-direction:column;gap:8px"></div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn btn-ghost btn-sm" id="btnStepsRefresh">↻ Обновить</button>
+        <button class="btn btn-danger btn-sm" id="btnStepsClear">🗑 Очистить всё</button>
+      </div>
     </div>
 
     <form class="card form" id="settingsForm" autocomplete="off">

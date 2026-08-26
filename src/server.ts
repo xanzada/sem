@@ -324,6 +324,25 @@ export async function buildServer(engine: Engine): Promise<void> {
     return r;
   });
 
+  app.post('/api/picker/save-steps', async () => {
+    const r = picker.saveAsSteps();
+    engine.applySettings();
+    return r;
+  });
+
+  app.get('/api/steps', async () => {
+    const { parseSteps } = await import('./workflow.js');
+    return { steps: parseSteps() };
+  });
+
+  app.post('/api/steps', async (req) => {
+    const { steps } = ((req.body ?? {}) as { steps?: unknown }) ?? {};
+    if (!Array.isArray(steps)) return { ok: false, error: 'steps array required' };
+    setSettingsPatch({ stepsJson: JSON.stringify(steps) });
+    engine.applySettings();
+    return { ok: true, count: steps.length };
+  });
+
   app.post('/api/picker/stop', async () => picker.stop());
 
   app.post('/api/control', async (req, reply) => {

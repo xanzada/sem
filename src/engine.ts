@@ -18,7 +18,7 @@ import {
   latestCheckpoint,
   resolveCheckpointsForApp,
 } from './checkpoint.js';
-import { createDemoDriver, LiveHttpDriver, SelectorBrokenError } from './workflow.js';
+import { createDemoDriver, LiveHttpDriver, parseSteps, StepsDriver, SelectorBrokenError } from './workflow.js';
 import {
   MissingSelectorsError,
   SimulatedIncident,
@@ -75,6 +75,7 @@ export class Engine {
   }
 
   private makeDriver(simulation: boolean): WorkflowDriver {
+    if (!simulation && parseSteps().length > 0) return new StepsDriver();
     return simulation ? createDemoDriver(this.demoSeqRestored) : new LiveHttpDriver();
   }
 
