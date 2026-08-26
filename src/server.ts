@@ -253,6 +253,33 @@ export async function buildServer(engine: Engine): Promise<void> {
 
   app.get('/healthz', async () => ({ ok: true }));
 
+  app.get('/api/debug/shot', async () => {
+    const f = await import('./browser.js').then((m) => m.screenshot('manual'));
+    return { ok: !!f, file: f };
+  });
+
+  app.get('/api/debug/dump', async () => {
+    const page = await import('./browser.js').then((m) => m.getPage());
+    return page.evaluate(`(() => ({
+      url: location.href,
+      title: document.title,
+      bodyText: document.body.innerText.slice(0, 1200),
+      inputs: [...document.querySelectorAll('input,textarea')].map((i) => ({
+        t: i.type, id: i.id, name: i.name, ph: i.placeholder,
+      })),
+      buttons: [...document.querySelectorAll('button,[role=button]')]
+        .map((b) => ({ txt: (b.innerText || '').trim().slice(0, 40), cls: String(b.className).slice(0, 60) }))
+        .filter((b) => b.txt)
+        .slice(0, 30),
+      links: [...document.querySelectorAll('a')]
+        .map((a) => ({ txt: a.innerText.trim().slice(0, 30), href: a.getAttribute('href') }))
+        .filter((l) => l.txt)
+        .slice(0, 30),
+      tables: [...document.querySelectorAll('table tbody')]
+        .map((t) => ({ rows: t.querySelectorAll('tr').length })),
+    }))()`);
+  });
+
   app.post('/api/picker/start', async (req) => {
     const snap = engine.snapshot();
     if (snap.running && !snap.paused) {
