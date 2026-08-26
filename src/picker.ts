@@ -98,11 +98,13 @@ const INJECT = String.raw`
     if (txt && (tag === 'button' || tag === 'a' || tag === 'input')) {
       cands.push(tag + ':has-text("' + txt.replace(/"/g, '') + '")');
     }
-    if (el.classList.length) cands.push(tag + '.' + Array.prototype.slice.call(el.classList, 0, 2).join('.'));
+    const clsList = Array.prototype.slice.call(el.classList).filter((c) => c !== 'sem-hl' && c !== 'sempick-hl');
+    if (clsList.length) cands.push(tag + '.' + clsList.slice(0, 2).join('.'));
     let cur = el, path = [];
     while (cur && cur.tagName !== 'BODY') {
       let s = cur.tagName.toLowerCase();
-      if (cur.classList.length) s += '.' + Array.prototype.slice.call(cur.classList, 0, 3).join('.');
+      const pc = Array.prototype.slice.call(cur.classList).filter((c) => c !== 'sem-hl' && c !== 'sempick-hl');
+      if (pc.length) s += '.' + pc.slice(0, 3).join('.');
       const par = cur.parentElement;
       if (par) {
         const same = Array.prototype.filter.call(par.children, (c) => c.tagName === cur.tagName);
