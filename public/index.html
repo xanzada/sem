@@ -120,6 +120,13 @@
       <div class="form-row"><label>URL списка заявок (необязательно)</label><input type="url" name="listUrl" placeholder="https://example.kz/applications"></div>
 
       <details class="sel-details">
+        <summary>Селекторы формы входа (если сайт нестандартный)</summary>
+        <div class="hint">Пример для hub.alemi.kz:
+<code>{"user":["#hub-identifier"],"password":["#hub-password"],"submit":[".partner-auth-submit"]}</code></div>
+        <textarea name="loginSelectorsJson" rows="3" placeholder='{"user": [...], "password": [...], "submit": [...]}'>{{LOGIN_SEL}}</textarea>
+      </details>
+
+      <details class="sel-details">
         <summary>Селекторы элементов сайта (JSON)</summary>
         <div class="hint">Заполняется после анализа сайта по вашим скриншотам. Пример:
 <code>{"listRow":"table tbody tr","openLink":"a","statusPending":".status-pending","statusAccepted":".status-accepted","acceptButton":"#acceptBtn"}</code></div>

@@ -264,6 +264,18 @@ export async function buildServer(engine: Engine): Promise<void> {
 
   app.post('/api/picker/reinject', async () => picker.reinject());
 
+  app.post('/api/picker/demo', async (req) => {
+    const snap = engine.snapshot();
+    if (snap.running && !snap.paused) {
+      return { ok: false, reason: 'Бот жұмыс істеп тұр' };
+    }
+    const { url, selectors } = ((req.body ?? {}) as {
+      url?: string;
+      selectors?: string[];
+    }) ?? {};
+    return picker.demoClicks(url, Array.isArray(selectors) ? selectors : []);
+  });
+
   app.get('/api/picker/picks', async () => ({
     active: picker.isActive(),
     picks: picker.list(),

@@ -6,6 +6,7 @@ export interface SemSettings {
   listUrl: string;
   username: string;
   password: string;
+  loginSelectorsJson: string;
   selectorsJson: string;
   speed: number;
   actionDelayMs: number;
@@ -23,6 +24,7 @@ export const DEFAULT_SETTINGS: SemSettings = {
   listUrl: '',
   username: '',
   password: '',
+  loginSelectorsJson: '',
   selectorsJson: '',
   speed: 1,
   actionDelayMs: 800,
@@ -42,6 +44,7 @@ const ENV_KEYS: Partial<Record<keyof SemSettings, string>> = {
   listUrl: 'SITE_LIST_URL',
   username: 'SITE_USERNAME',
   password: 'SITE_PASSWORD',
+  loginSelectorsJson: 'LOGIN_SELECTORS_JSON',
   selectorsJson: 'SELECTORS_JSON',
   speed: 'SPEED',
   actionDelayMs: 'ACTION_DELAY_MS',

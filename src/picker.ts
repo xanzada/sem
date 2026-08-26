@@ -109,6 +109,40 @@ export async function reinject(): Promise<void> {
   active = true;
 }
 
+export async function demoClicks(
+  url: string | undefined,
+  selectors: string[]
+): Promise<{ ok: boolean; count: number }> {
+  const s = getAllSettings();
+  const page = await getPage();
+  await ensureBinding(page);
+  await page.goto(url || s.listUrl || s.siteUrl, {
+    waitUntil: 'domcontentloaded',
+    timeout: 30000,
+  });
+  await page.waitForTimeout(2500);
+  await page.evaluate(INJECT).catch(() => {});
+  let count = 0;
+  for (const sel of selectors) {
+    try {
+      const el = page.locator(sel).first();
+      const box = await el.boundingBox({ timeout: 5000 });
+      if (!box) continue;
+      const x = box.x + box.width / 2;
+      const y = box.y + box.height / 2;
+      await page.mouse.move(x, y, { steps: 10 });
+      await page.mouse.click(x, y);
+      count += 1;
+      await page.waitForTimeout(700);
+    } catch {
+      /* skip */
+    }
+  }
+  active = true;
+  log('info', 'CONTROL', `Демо-нажатия в режиме обучения: ${count} элемент(ов)`);
+  return { ok: true, count };
+}
+
 export function capture(d: { tag: string; text: string; cands: string[] }): void {
   picks.push({
     index: picks.length,

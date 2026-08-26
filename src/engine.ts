@@ -429,32 +429,82 @@ export class Engine {
     return true;
   }
 
+  private async robustFill(
+    page: Page,
+    loc: import('playwright').Locator,
+    value: string
+  ): Promise<void> {
+    await loc.click({ timeout: 4000 }).catch(() => {});
+    await loc.fill(value, { timeout: 4000 }).catch(async () => {
+      await loc.pressSequentially(value, { delay: 40 }).catch(() => {});
+    });
+    const v = await loc.inputValue().catch(() => '');
+    if (v !== value) {
+      await loc.click().catch(() => {});
+      await loc.pressSequentially(value, { delay: 40 }).catch(() => {});
+    }
+  }
+
   private async tryLogin(quiet = false): Promise<boolean> {
     const s = getAllSettings();
+    let custom: { user?: string[]; password?: string[]; submit?: string[] } = {};
     try {
-      const page = await getPage();
-      await page.goto(s.siteUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await sleep(1500);
-      const userLoc = page
-        .locator(
-          'input[type=email]:visible, input[name*=user i], input[name*=login i], input[type=text]:visible'
-        )
-        .first();
-      const passLoc = page.locator('input[type=password]:visible').first();
-      if ((await userLoc.count()) === 0 || (await passLoc.count()) === 0) {
+      if (s.loginSelectorsJson.trim()) custom = JSON.parse(s.loginSelectorsJson);
+    } catch {
+      /* ignore bad json */
+    }
+    const userCands = [
+      ...(custom.user ?? []),
+      'input[type=email]:visible',
+      '#hub-identifier',
+      'input[name*=user i]',
+      'input[name*=login i]',
+      'input[name*=mail i]',
+      'input[type=text]:visible',
+    ];
+    const passCands = [...(custom.password ?? []), 'input[type=password]:visible'];
+    const submitCands = [
+      ...(custom.submit ?? []),
+      'button[type=submit]',
+      '.partner-auth-submit',
+      'input[type=submit]',
+      'button:has-text("Войти")',
+      'button:has-text("Log in")',
+      'button:has-text("Sign in")',
+    ];
+
+    const firstVisible = async (cands: string[]) => {
+      for (const c of cands) {
+        try {
+          const l = page0.locator(c).first();
+          if ((await l.count()) > 0 && (await l.isVisible())) return l;
+        } catch {
+          /* next */
+        }
+      }
+      return null;
+    };
+
+    let page0!: Page;
+    try {
+      page0 = await getPage();
+      await page0.goto(s.siteUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await sleep(2000);
+      const userLoc = await firstVisible(userCands);
+      const passLoc = await firstVisible(passCands);
+      if (!userLoc || !passLoc) {
         if (!quiet) log('warn', 'AUTH', 'Форма входа не найдена на странице');
         return false;
       }
-      await userLoc.fill(s.username);
-      await passLoc.fill(s.password);
-      const submit = page
-        .locator(
-          'button[type=submit], input[type=submit], button:has-text("Войти"), button:has-text("Log in"), button:has-text("Sign in")'
-        )
-        .first();
-      await submit.click();
-      await sleep(3500);
-      const cls = await classifyPage(page);
+      await this.robustFill(page0, userLoc, s.username);
+      await this.robustFill(page0, passLoc, s.password);
+      let submit = await firstVisible(submitCands);
+      if (!submit) submit = passLoc;
+      await submit.click({ timeout: 5000 }).catch(async () => {
+        await passLoc.press('Enter').catch(() => {});
+      });
+      await sleep(4000);
+      const cls = await classifyPage(page0);
       return cls.kind !== 'AUTH';
     } catch (e) {
       if (!quiet) log('error', 'AUTH', `Ошибка входа: ${String(e).slice(0, 120)}`);
