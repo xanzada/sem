@@ -26,14 +26,31 @@ export function recordApplication(a: {
 export function countToday(): number {
   const row = db
     .prepare(
-      "SELECT COUNT(*) c FROM applications WHERE date(ts,'localtime')=date('now','localtime')"
+      "SELECT COUNT(*) c FROM applications WHERE date(ts,'localtime')=date('now','localtime') AND action!='ai-task'"
     )
     .get() as { c: number };
   return row.c;
 }
 
+export function countAiToday(): number {
+  const row = db
+    .prepare(
+      "SELECT COUNT(*) c FROM applications WHERE date(ts,'localtime')=date('now','localtime') AND action='ai-task'"
+    )
+    .get() as { c: number };
+  return row.c;
+}
+
+export function resetStats(): { removed: number } {
+  const before = (db.prepare('SELECT COUNT(*) c FROM applications').get() as { c: number }).c;
+  db.prepare('DELETE FROM applications').run();
+  db.prepare("DELETE FROM ledger WHERE status!='PENDING'").run();
+  return { removed: before };
+}
+
 export interface AnalyticsSummary {
   today: number;
+  aiToday: number;
   week: number;
   total: number;
   avgDurationMs: number;
@@ -69,6 +86,7 @@ export function analyticsSummary(): AnalyticsSummary {
 
   return {
     today: countToday(),
+    aiToday: countAiToday(),
     week: week.c,
     total: total.c,
     avgDurationMs: Math.round(avg.a ?? 0),

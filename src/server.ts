@@ -17,6 +17,7 @@ import {
   applySecretPlaceholders,
 } from './settings.js';
 import { analyticsSummary } from './analytics.js';
+import { log } from './logger.js';
 import { latestCheckpoint } from './checkpoint.js';
 import { registerDemoSite } from './demo-site.js';
 import * as picker from './picker.js';
@@ -250,6 +251,14 @@ export async function buildServer(engine: Engine): Promise<void> {
   });
 
   app.get('/api/analytics', async () => analyticsSummary());
+
+  app.post('/api/stats/reset', async () => {
+    const { resetStats } = await import('./analytics.js');
+    const r = resetStats();
+    log('info', 'CONTROL', `Статистика обнулена (удалено записей: ${r.removed})`);
+    bus.emit('status', engine.snapshot());
+    return { ok: true, ...r };
+  });
 
   app.get('/api/selectors-health', async () => {
     const s = getAllSettings();
