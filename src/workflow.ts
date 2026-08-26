@@ -416,7 +416,15 @@ export class StepsDriver implements WorkflowDriver {
         case 'click':
         case 'accept': {
           const el = await firstVisible(page, st.sel ?? []);
-          if (!el) throw new SelectorBrokenError(`шаг ${i + 1} — ${label}`);
+          if (!el) {
+            const filtered = (st.sel ?? []).some((s) => s.includes(':has('));
+            if (st.act === 'click' && filtered) {
+              ctx.log('info', 'WORKFLOW', 'Свободных заявок в обработке нет — ожидаю новых');
+              await ctx.delay(3);
+              return;
+            }
+            throw new SelectorBrokenError(`шаг ${i + 1} — ${label}`);
+          }
           const appId = extractAppId(page.url());
           if (st.act === 'accept') {
             const intentId = await ctx.beginIntent(appId, 'accept');
