@@ -82,18 +82,18 @@
   <!-- ===== НАСТРОЙКИ ===== -->
   <section class="tab-page" data-tab="settings">
     <div class="card form" style="margin-bottom:14px">
-      <div class="divider" style="border:none;margin-top:0;padding-top:0">🎯 Оқыту режимі — элементтерді өзіңіз көрсетесіз</div>
-      <div class="hint">1) Ботты тоқтатыңыз (⏸/⏹) &nbsp;2) VNC вкладкасына өтіп, сайтта маңызды элементтерге басыңыз &nbsp;3) Төменде шыққан нәтижелерге рөл беріп, сақтаңыз.</div>
+      <div class="divider" style="border:none;margin-top:0;padding-top:0">🎯 Режим обучения — укажите элементы сами</div>
+      <div class="hint">1) Остановите бота (⏸/⏹) &nbsp;2) Перейдите во вкладку VNC и нажимайте на нужные элементы сайта &nbsp;3) Ниже задайте роль каждому элементу и сохраните.</div>
       <div class="form-row two">
-        <div><label>Ашу URL (бос = сайт)</label><input type="url" id="pickUrl" placeholder="https://..."></div>
-        <div style="display:flex;gap:8px;align-items:flex-end">
-          <button class="btn btn-primary wide" id="btnPickStart" style="white-space:nowrap">🎯 Бастау</button>
-          <button class="btn btn-ghost wide" id="btnPickReinject">Қайта енгізу</button>
-          <button class="btn btn-danger wide" id="btnPickStop">⏹</button>
+        <div><label>Открыть URL (пусто = сайт)</label><input type="url" id="pickUrl" placeholder="https://..."></div>
+        <div style="display:flex;gap:6px;align-items:flex-end">
+          <button class="btn btn-primary btn-sm" id="btnPickStart">🎯 Начать</button>
+          <button class="btn btn-ghost btn-sm" id="btnPickReinject">Реинжект</button>
+          <button class="btn btn-danger btn-sm" id="btnPickStop">⏹</button>
         </div>
       </div>
       <div id="picksOut" style="margin-top:12px;display:flex;flex-direction:column;gap:8px"></div>
-      <button class="btn btn-primary wide" id="btnPickSave" style="margin-top:12px">💾 Белгіленгенді селекторларға сақтау</button>
+      <button class="btn btn-primary wide" id="btnPickSave" style="margin-top:12px">💾 Сохранить отмеченное в селекторы</button>
     </div>
 
     <form class="card form" id="settingsForm" autocomplete="off">
@@ -125,7 +125,7 @@
 <code>{"listRow":"table tbody tr","openLink":"a","statusPending":".status-pending","statusAccepted":".status-accepted","acceptButton":"#acceptBtn"}</code></div>
         <textarea name="selectorsJson" rows="5" placeholder='{"listRow": ["...", "..."], "acceptButton": "..."}'></textarea>
         <div class="form-row" style="margin-top:10px">
-          <button type="button" class="btn btn-ghost wide" id="btnSelHealth">🧪 Селекторларды сайтта тексеру</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="btnSelHealth">🧪 Проверить селекторы на сайте</button>
           <div id="selHealthOut" class="hint" style="margin-top:8px"></div>
         </div>
       </details>

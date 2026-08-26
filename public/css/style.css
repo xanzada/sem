@@ -73,6 +73,7 @@ html, body {
 .btn-ghost { background: #182131; color: var(--text); border: 1px solid var(--border); padding: 10px 12px; }
 .btn-danger { background: #2a1518; color: #ff8080; border: 1px solid #472225; padding: 10px 12px; }
 .btn.wide { width: 100%; }
+.btn-sm { padding: 7px 11px; font-size: 12.5px; border-radius: 9px; }
 
 main { padding: 14px 14px calc(90px + env(safe-area-inset-bottom)); max-width: 720px; margin: 0 auto; }
 .tab-page { display: none; animation: fadeIn .22s ease; }

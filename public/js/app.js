@@ -294,19 +294,19 @@ function bindUI() {
 
   /* ---------- Оқыту режимі (picker) ---------- */
   const ROLE_LABELS = {
-    ignore: '— ешқандай',
-    listRow: '📋 Заявка жолы',
-    openLink: '🔗 Ашу сілтемесі',
-    statusPending: '🟡 Статус: күтуде',
-    statusAccepted: '🟢 Статус: қабылданған',
-    acceptButton: '✅ Принять батырмасы',
+    ignore: '— не задано',
+    listRow: '📋 Строка заявки',
+    openLink: '🔗 Ссылка открытия',
+    statusPending: '🟡 Статус: в обработке',
+    statusAccepted: '🟢 Статус: принята',
+    acceptButton: '✅ Кнопка Принять',
   };
   let pickPoll = null;
 
   function renderPicks(picks) {
     const out = $('#picksOut');
     if (!picks.length) {
-      out.innerHTML = '<div class="hint">Әзірше элемент таңдалмады — VNC-де сайтты ашып, басыңыз.</div>';
+      out.innerHTML = '<div class="hint">Пока ничего не выбрано — откройте сайт во вкладке VNC и нажимайте на элементы.</div>';
       return;
     }
     out.innerHTML = '';
@@ -318,13 +318,13 @@ function bindUI() {
         .map((c, i) => `<option value="${i}" ${p.chosen === i ? 'selected' : ''}>${escapeHtml(c)}</option>`)
         .join('');
       row.innerHTML = `
-        <div style="font-size:13px"><b>&lt;${escapeHtml(p.tag)}&gt;</b> ${escapeHtml(p.text || '(мәтінсіз)')}</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <select data-pick="${p.index}" data-field="role" style="flex:1;min-width:150px">
+        <div style="font-size:13px"><b>&lt;${escapeHtml(p.tag)}&gt;</b> ${escapeHtml(p.text || '(без текста)')}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <select data-pick="${p.index}" data-field="role" style="flex:1;min-width:140px">
             ${Object.entries(ROLE_LABELS).map(([v, l]) =>
               `<option value="${v}" ${p.label === v ? 'selected' : ''}>${l}</option>`).join('')}
           </select>
-          <select data-pick="${p.index}" data-field="chosen" style="flex:2;min-width:200px;font-family:monospace;font-size:11px">
+          <select data-pick="${p.index}" data-field="chosen" style="flex:2;min-width:180px;font-family:monospace;font-size:11px">
             ${candsOpts}
           </select>
         </div>`;
@@ -353,20 +353,20 @@ function bindUI() {
   $('#btnPickStart').addEventListener('click', async () => {
     try {
       const r = await api('/api/picker/start', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: $('#pickUrl').value }) });
-      if (!r.ok) { toast('❌ ' + (r.reason || 'Кіре алмадым')); return; }
-      toast('🎯 Оқыту режимі қосылды — VNC вкладкасына өтіңіз');
+      if (!r.ok) { toast('❌ ' + (r.reason || 'Не удалось открыть')); return; }
+      toast('🎯 Режим обучения включён — перейдите во вкладку VNC');
       refreshPicks();
       if (!pickPoll) pickPoll = setInterval(refreshPicks, 4000);
     } catch (e) { toast('Қате: ' + e.message); }
   });
   $('#btnPickReinject').addEventListener('click', async () => {
     await api('/api/picker/reinject', { method: 'POST' });
-    toast('Скрипт қайта енгізілді');
+    toast('Скрипт внедрён заново');
   });
   $('#btnPickStop').addEventListener('click', async () => {
     await api('/api/picker/stop', { method: 'POST' });
     clearInterval(pickPoll); pickPoll = null;
-    toast('⏹ Оқыту режимі тоқтатылды');
+    toast('⏹ Режим обучения остановлен');
   });
   $('#btnPickSave').addEventListener('click', async () => {
     try {
@@ -381,18 +381,18 @@ function bindUI() {
     try {
       const r = await api('/api/selectors-health');
       if (r.needsLogin) {
-        out.textContent = '⚠️ Бот сайтқа кірмеген. Алдымен ▶ Старт басып, логинделсін, сосын ⏸ Пауза жасап қайта тексеріңіз.';
+        out.textContent = '⚠️ Бот ещё не вошёл на сайт. Нажмите ▶ Старт, дождитесь входа, затем ⏸ Пауза и повторите проверку.';
         return;
       }
       if (!r.ok) {
-        out.textContent = '❌ ' + (r.reason || 'Тексеру мүмкін болмады');
+        out.textContent = '❌ ' + (r.reason || 'Не удалось проверить');
         return;
       }
       out.innerHTML =
         r.items.map((i) => (i.ok ? '✅ ' : '❌ ') + escapeHtml(i.key)).join('<br>') +
         '<br><span style="opacity:.7">' + escapeHtml(r.note || '') + '</span>';
     } catch (e) {
-      out.textContent = 'Қате: ' + e.message;
+      out.textContent = 'Ошибка: ' + e.message;
     }
   });
 
