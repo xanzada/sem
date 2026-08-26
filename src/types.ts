@@ -29,6 +29,7 @@ export interface Snapshot {
 export interface DriverCtx {
   page: import('playwright').Page;
   log(level: Level, category: Category, message: string, meta?: unknown): void;
+  shot?(name: string): Promise<string | null>;
   setStep(label: string): void;
   delay(mult?: number): Promise<void>;
   beginIntent(appId: string, type: string): Promise<string>;

@@ -81,6 +81,21 @@
 
   <!-- ===== НАСТРОЙКИ ===== -->
   <section class="tab-page" data-tab="settings">
+    <div class="card form" style="margin-bottom:14px">
+      <div class="divider" style="border:none;margin-top:0;padding-top:0">🎯 Оқыту режимі — элементтерді өзіңіз көрсетесіз</div>
+      <div class="hint">1) Ботты тоқтатыңыз (⏸/⏹) &nbsp;2) VNC вкладкасына өтіп, сайтта маңызды элементтерге басыңыз &nbsp;3) Төменде шыққан нәтижелерге рөл беріп, сақтаңыз.</div>
+      <div class="form-row two">
+        <div><label>Ашу URL (бос = сайт)</label><input type="url" id="pickUrl" placeholder="https://..."></div>
+        <div style="display:flex;gap:8px;align-items:flex-end">
+          <button class="btn btn-primary wide" id="btnPickStart" style="white-space:nowrap">🎯 Бастау</button>
+          <button class="btn btn-ghost wide" id="btnPickReinject">Қайта енгізу</button>
+          <button class="btn btn-danger wide" id="btnPickStop">⏹</button>
+        </div>
+      </div>
+      <div id="picksOut" style="margin-top:12px;display:flex;flex-direction:column;gap:8px"></div>
+      <button class="btn btn-primary wide" id="btnPickSave" style="margin-top:12px">💾 Белгіленгенді селекторларға сақтау</button>
+    </div>
+
     <form class="card form" id="settingsForm" autocomplete="off">
       <div class="form-row two">
         <div>

@@ -223,6 +223,9 @@ export class Engine {
       rand(): number {
         return Math.random();
       },
+      async shot(name: string) {
+        return screenshot(name);
+      },
     };
   }
 

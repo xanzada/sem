@@ -12,6 +12,7 @@ export interface SemSettings {
   keepaliveSec: number;
   securityTimeoutMin: number;
   autostart: boolean;
+  evidenceShots: boolean;
   telegramToken: string;
   telegramChatId: string;
 }
@@ -28,6 +29,7 @@ export const DEFAULT_SETTINGS: SemSettings = {
   keepaliveSec: 180,
   securityTimeoutMin: 30,
   autostart: true,
+  evidenceShots: true,
   telegramToken: '',
   telegramChatId: '',
 };
@@ -46,6 +48,7 @@ const ENV_KEYS: Partial<Record<keyof SemSettings, string>> = {
   keepaliveSec: 'KEEPALIVE_SEC',
   securityTimeoutMin: 'SECURITY_TIMEOUT_MIN',
   autostart: 'AUTOSTART',
+  evidenceShots: 'EVIDENCE_SHOTS',
   telegramToken: 'TELEGRAM_TOKEN',
   telegramChatId: 'TELEGRAM_CHAT_ID',
 };

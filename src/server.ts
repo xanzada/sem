@@ -17,6 +17,7 @@ import {
 import { analyticsSummary } from './analytics.js';
 import { latestCheckpoint } from './checkpoint.js';
 import { registerDemoSite } from './demo-site.js';
+import * as picker from './picker.js';
 import { getPage } from './browser.js';
 import { classifyPage } from './classifier.js';
 import { readSelectors } from './workflow.js';
@@ -251,6 +252,40 @@ export async function buildServer(engine: Engine): Promise<void> {
   app.get('/api/checkpoint', async () => latestCheckpoint() ?? null);
 
   app.get('/healthz', async () => ({ ok: true }));
+
+  app.post('/api/picker/start', async (req) => {
+    const snap = engine.snapshot();
+    if (snap.running && !snap.paused) {
+      return { ok: false, reason: 'Бот жұмыс істеп тұр — алдымен ⏸ Пауза немесе ⏹ Стоп' };
+    }
+    const { url } = ((req.body ?? {}) as { url?: string }) ?? {};
+    return picker.startPicker(url);
+  });
+
+  app.post('/api/picker/reinject', async () => picker.reinject());
+
+  app.get('/api/picker/picks', async () => ({
+    active: picker.isActive(),
+    picks: picker.list(),
+  }));
+
+  app.post('/api/picker/label', async (req) => {
+    const { index, role, chosen } = (req.body ?? {}) as {
+      index: number;
+      role: string;
+      chosen?: number;
+    };
+    picker.label(Number(index), String(role), chosen != null ? Number(chosen) : undefined);
+    return { ok: true };
+  });
+
+  app.post('/api/picker/save', async () => {
+    const r = picker.saveToSelectors();
+    engine.applySettings();
+    return r;
+  });
+
+  app.post('/api/picker/stop', async () => picker.stop());
 
   app.post('/api/control', async (req, reply) => {
     const { cmd } = ((req.body ?? {}) as { cmd?: string }) ?? {};

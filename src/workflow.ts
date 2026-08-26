@@ -371,6 +371,9 @@ export class LiveHttpDriver implements WorkflowDriver {
       durationMs: Date.now() - startedAt,
     });
     ctx.log('success', 'WORKFLOW', `Заявка #${appId} принята ✅`);
+    if (getSetting('evidenceShots')) {
+      await ctx.shot?.(`accepted-${appId}`);
+    }
     await ctx.saveCheckpoint({
       appId,
       step: 'confirm',

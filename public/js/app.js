@@ -292,6 +292,89 @@ function bindUI() {
   $('#settingsForm').addEventListener('submit', saveSettings);
   $('#btnTestLogin').addEventListener('click', () => control('test-login'));
 
+  /* ---------- Оқыту режимі (picker) ---------- */
+  const ROLE_LABELS = {
+    ignore: '— ешқандай',
+    listRow: '📋 Заявка жолы',
+    openLink: '🔗 Ашу сілтемесі',
+    statusPending: '🟡 Статус: күтуде',
+    statusAccepted: '🟢 Статус: қабылданған',
+    acceptButton: '✅ Принять батырмасы',
+  };
+  let pickPoll = null;
+
+  function renderPicks(picks) {
+    const out = $('#picksOut');
+    if (!picks.length) {
+      out.innerHTML = '<div class="hint">Әзірше элемент таңдалмады — VNC-де сайтты ашып, басыңыз.</div>';
+      return;
+    }
+    out.innerHTML = '';
+    [...picks].reverse().forEach((p) => {
+      const row = document.createElement('div');
+      row.className = 'card';
+      row.style.cssText = 'padding:10px;display:flex;flex-direction:column;gap:6px';
+      const candsOpts = p.cands
+        .map((c, i) => `<option value="${i}" ${p.chosen === i ? 'selected' : ''}>${escapeHtml(c)}</option>`)
+        .join('');
+      row.innerHTML = `
+        <div style="font-size:13px"><b>&lt;${escapeHtml(p.tag)}&gt;</b> ${escapeHtml(p.text || '(мәтінсіз)')}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <select data-pick="${p.index}" data-field="role" style="flex:1;min-width:150px">
+            ${Object.entries(ROLE_LABELS).map(([v, l]) =>
+              `<option value="${v}" ${p.label === v ? 'selected' : ''}>${l}</option>`).join('')}
+          </select>
+          <select data-pick="${p.index}" data-field="chosen" style="flex:2;min-width:200px;font-family:monospace;font-size:11px">
+            ${candsOpts}
+          </select>
+        </div>`;
+      out.appendChild(row);
+    });
+    out.querySelectorAll('select').forEach((sel) => {
+      sel.addEventListener('change', async () => {
+        const idx = Number(sel.dataset.pick);
+        if (sel.dataset.field === 'role') {
+          await api('/api/picker/label', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ index: idx, role: sel.value }) });
+        } else {
+          await api('/api/picker/label', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ index: idx, role: 'pending-label', chosen: Number(sel.value) }) });
+          await api('/api/picker/label', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ index: idx, role: picks.find((x) => x.index === idx)?.label || 'ignore' }) });
+        }
+      });
+    });
+  }
+
+  async function refreshPicks() {
+    try {
+      const r = await api('/api/picker/picks');
+      renderPicks(r.picks || []);
+    } catch { /* ignore */ }
+  }
+
+  $('#btnPickStart').addEventListener('click', async () => {
+    try {
+      const r = await api('/api/picker/start', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: $('#pickUrl').value }) });
+      if (!r.ok) { toast('❌ ' + (r.reason || 'Кіре алмадым')); return; }
+      toast('🎯 Оқыту режимі қосылды — VNC вкладкасына өтіңіз');
+      refreshPicks();
+      if (!pickPoll) pickPoll = setInterval(refreshPicks, 4000);
+    } catch (e) { toast('Қате: ' + e.message); }
+  });
+  $('#btnPickReinject').addEventListener('click', async () => {
+    await api('/api/picker/reinject', { method: 'POST' });
+    toast('Скрипт қайта енгізілді');
+  });
+  $('#btnPickStop').addEventListener('click', async () => {
+    await api('/api/picker/stop', { method: 'POST' });
+    clearInterval(pickPoll); pickPoll = null;
+    toast('⏹ Оқыту режимі тоқтатылды');
+  });
+  $('#btnPickSave').addEventListener('click', async () => {
+    try {
+      const r = await api('/api/picker/save', { method: 'POST' });
+      if (r.ok) { toast('✅ Селекторлар сақталды'); await loadSettings(); }
+    } catch (e) { toast('Қате: ' + e.message); }
+  });
+
   $('#btnSelHealth').addEventListener('click', async () => {
     const out = $('#selHealthOut');
     out.textContent = '⏳ Сайтты тексеруде…';
