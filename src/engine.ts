@@ -19,7 +19,7 @@ import {
   latestCheckpoint,
   resolveCheckpointsForApp,
 } from './checkpoint.js';
-import { createDemoDriver, LiveHttpDriver, parseSteps, StepsDriver, SelectorBrokenError } from './workflow.js';
+import { createDemoDriver, LiveHttpDriver, parseSteps, StepsDriver, AiLoopDriver, SelectorBrokenError } from './workflow.js';
 import {
   MissingSelectorsError,
   SimulatedIncident,
@@ -119,6 +119,8 @@ export class Engine {
   }
 
   private makeDriver(simulation: boolean): WorkflowDriver {
+    const s = getAllSettings();
+    if (!simulation && s.mode === 'ai') return new AiLoopDriver();
     if (!simulation && parseSteps().length > 0) return new StepsDriver();
     return simulation ? createDemoDriver(this.demoSeqRestored) : new LiveHttpDriver();
   }
@@ -130,13 +132,25 @@ export class Engine {
     this.startedAt = Date.now();
     const s = getAllSettings();
     const simulation = s.mode === 'simulation';
+    const aiMode = s.mode === 'ai';
 
-    if (!simulation && !s.siteUrl) {
+    if (!simulation && aiMode) {
+      if (!String(s.aiApiKey || '')) {
+        this.setState(WState.ERROR, 'Введите Gemini API Key (Настройки → ИИ-агент)');
+        log('error', 'CONTROL', 'Запуск невозможен: нет Gemini API Key');
+        return;
+      }
+      if (!String(s.aiInstruction || '').trim()) {
+        this.setState(WState.ERROR, 'Задайте постоянную инструкцию для ИИ-агента');
+        log('error', 'CONTROL', 'Запуск невозможен: пустая инструкция ИИ-агента');
+        return;
+      }
+    } else if (!simulation && !s.siteUrl) {
       this.setState(WState.ERROR, 'Не задан адрес сайта в настройках');
       log('error', 'CONTROL', 'Запуск невозможен: не указан адрес сайта');
       return;
     }
-    if (!simulation && !(s.username && s.password)) {
+    if (!simulation && !aiMode && !(s.username && s.password)) {
       log('warn', 'AUTH', 'Логин или пароль не заданы — при потере сессии потребуется оператор');
     }
 

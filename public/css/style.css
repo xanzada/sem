@@ -286,6 +286,48 @@ main { padding: 14px 14px calc(90px + env(safe-area-inset-bottom)); max-width: 7
 }
 .flow-arrow { text-align: center; color: var(--accent); font-size: 15px; line-height: 1; }
 
+/* ---------- ИИ-агент ---------- */
+.ai-card { border-color: rgba(79,140,255,.35); box-shadow: 0 12px 40px -22px rgba(79,140,255,.7); margin-bottom: 16px; }
+.btn.big { padding: 15px 18px; font-size: 15.5px; border-radius: 14px; }
+.btn-row { display: flex; flex-direction: column; gap: 9px; margin-top: 4px; }
+.ai-live { margin-top: 12px; }
+.ai-live:empty { display: none; }
+.ai-live-head { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 700; color: #9dc0ff; }
+.ai-step { font-size: 11.5px; font-weight: 600; color: var(--muted); background: #182131; padding: 2px 8px; border-radius: 999px; }
+.ai-dot { width: 9px; height: 9px; border-radius: 50%; background: #22c55e; animation: ping 1.4s cubic-bezier(0,0,.2,1) infinite; }
+.ai-task { margin-top: 7px; font-size: 13px; color: var(--text); background: #101825; border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; }
+.ai-act { margin-top: 7px; font-size: 13px; color: #cfe4ff; background: rgba(79,140,255,.1); border: 1px solid rgba(79,140,255,.3); border-radius: 10px; padding: 9px 11px; }
+
+/* ---------- мобильная адаптация ---------- */
+@media (max-width: 560px) {
+  body { font-size: 15px; }
+  main { padding: 12px 11px calc(96px + env(safe-area-inset-bottom)); }
+  .topbar { padding: calc(9px + env(safe-area-inset-top)) 11px 9px; flex-wrap: wrap; }
+  .brand-sub { max-width: 96px; }
+  .top-actions { gap: 6px; }
+  .top-actions .btn { padding: 11px 12px; font-size: 14px; }
+  .mode-badge { font-size: 10px; padding: 3px 7px; }
+  .form-row.two, .form-row.three { grid-template-columns: 1fr; gap: 12px; }
+  .status-main { flex-wrap: wrap; }
+  .big-orb { width: 60px; height: 60px; }
+  .big-orb span { inset: 14px; }
+  .today-box { width: 100%; display: flex; align-items: center; justify-content: space-between;
+    border-top: 1px dashed var(--border); padding-top: 10px; margin-top: 4px; }
+  .today-num { font-size: 26px; }
+  .today-label { margin-top: 0; }
+  .form input, .form select, .form textarea { font-size: 16px; padding: 13px 12px; }
+  .btn { padding: 13px 15px; font-size: 14.5px; }
+  .btn-sm { padding: 10px 12px; font-size: 13px; }
+  .nav-btn { font-size: 10px; padding: 4px 6px; }
+  .nav-btn span { font-size: 21px; }
+  .modal-card { padding: 16px; border-radius: 14px; }
+  .stat-num { font-size: 23px; }
+  .tbl { font-size: 12.5px; }
+  .tbl th, .tbl td { padding: 8px 9px; }
+  .feed { max-height: 52vh; }
+  .vnc-card iframe { height: 62vh; }
+}
+
 @media (min-width: 700px) {
   main { padding-top: 22px; }
   .stat-grid { grid-template-columns: repeat(4, 1fr); }

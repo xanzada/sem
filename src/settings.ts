@@ -1,12 +1,15 @@
 import { db } from './db.js';
 
 export interface SemSettings {
-  mode: 'simulation' | 'live';
+  mode: 'simulation' | 'live' | 'ai';
   siteUrl: string;
   listUrl: string;
   username: string;
   password: string;
   loginSelectorsJson: string;
+  aiApiKey: string;
+  aiModel: string;
+  aiInstruction: string;
   selectorsJson: string;
   stepsJson: string;
   speed: number;
@@ -29,6 +32,9 @@ export const DEFAULT_SETTINGS: SemSettings = {
   username: '',
   password: '',
   loginSelectorsJson: '',
+  aiApiKey: '',
+  aiModel: 'gemini-2.0-flash',
+  aiInstruction: '',
   selectorsJson: '',
   stepsJson: '',
   speed: 1,
@@ -53,6 +59,9 @@ const ENV_KEYS: Partial<Record<keyof SemSettings, string>> = {
   username: 'SITE_USERNAME',
   password: 'SITE_PASSWORD',
   loginSelectorsJson: 'LOGIN_SELECTORS_JSON',
+  aiApiKey: 'AI_API_KEY',
+  aiModel: 'AI_MODEL',
+  aiInstruction: 'AI_INSTRUCTION',
   selectorsJson: 'SELECTORS_JSON',
   stepsJson: 'STEPS_JSON',
   speed: 'SPEED',
@@ -120,11 +129,13 @@ export function maskSettings(s: SemSettings): SemSettings {
     ...s,
     password: s.password ? '__SAVED__' : '',
     telegramToken: s.telegramToken ? '__SAVED__' : '',
+    aiApiKey: s.aiApiKey ? '__SAVED__' : '',
   };
 }
 
 export function applySecretPlaceholders(incoming: Partial<Record<string, unknown>>, current: SemSettings): void {
   if (incoming.password === '__SAVED__') delete incoming.password;
   if (incoming.telegramToken === '__SAVED__') delete incoming.telegramToken;
+  if (incoming.aiApiKey === '__SAVED__') delete incoming.aiApiKey;
   void current;
 }

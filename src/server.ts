@@ -410,6 +410,43 @@ export async function buildServer(engine: Engine): Promise<void> {
 
   app.post('/api/picker/stop', async () => picker.stop());
 
+  app.get('/api/ai/state', async () => {
+    const { agentState } = await import('./agent.js');
+    return agentState();
+  });
+
+  app.post('/api/ai/run', async (req) => {
+    const { task, maxSteps } = ((req.body ?? {}) as { task?: string; maxSteps?: number }) ?? {};
+    const snap = engine.snapshot();
+    if (snap.running && !snap.paused) {
+      return { ok: false, reason: 'Бот работает по расписанию — сначала ⏸ Пауза или ⏹ Стоп' };
+    }
+    const { runAiTask } = await import('./agent.js');
+    return runAiTask(String(task ?? ''), Math.min(40, Math.max(1, Number(maxSteps ?? 25))));
+  });
+
+  app.post('/api/ai/test', async () => {
+    const s = getAllSettings();
+    if (!s.aiApiKey) return { ok: false, reason: 'Ключ не задан' };
+    try {
+      const r = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(String(s.aiApiKey))}`,
+        { signal: AbortSignal.timeout(15000) }
+      );
+      if (!r.ok) return { ok: false, reason: `Google ответил ${r.status}` };
+      const j = (await r.json()) as { models?: { name?: string }[] };
+      const has = (j.models ?? []).some((m) => String(m.name).includes(String(s.aiModel)));
+      return {
+        ok: true,
+        models: (j.models ?? []).length,
+        modelFound: has,
+        model: String(s.aiModel),
+      };
+    } catch (e) {
+      return { ok: false, reason: String(e).slice(0, 120) };
+    }
+  });
+
   app.post('/api/control', async (req, reply) => {
     const { cmd } = ((req.body ?? {}) as { cmd?: string }) ?? {};
     switch (cmd) {
@@ -465,9 +502,18 @@ export async function buildServer(engine: Engine): Promise<void> {
     };
     bus.on('feed', onFeed);
     bus.on('status', onStatus);
+    const onAgent = (st: unknown): void => {
+      try {
+        ws.send(JSON.stringify({ type: 'agent', st }));
+      } catch {
+        /* closed */
+      }
+    };
+    bus.on('agent', onAgent);
     ws.on('close', () => {
       bus.off('feed', onFeed);
       bus.off('status', onStatus);
+      bus.off('agent', onAgent);
     });
   });
 

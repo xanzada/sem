@@ -153,6 +153,7 @@ function connectWs() {
       const data = JSON.parse(ev.data);
       if (data.type === 'feed') pushFeed(data.item);
       if (data.type === 'status') { snap = data.snap; renderStatus(); }
+      if (data.type === 'agent') renderAgent(data.st);
     } catch { /* ignore */ }
   };
   ws.onclose = () => { wsTimer = setTimeout(connectWs, 3000); };
@@ -268,7 +269,7 @@ function bindUI() {
       const tab = btn.dataset.tab;
       document.querySelectorAll('.tab-page').forEach((p) => p.classList.toggle('active', p.dataset.tab === tab));
       if (tab === 'analytics') loadAnalytics().catch(() => {});
-      if (tab === 'settings') { loadSettings().catch(() => {}); loadSteps(); refreshPickStatus(); }
+      if (tab === 'settings') { loadSettings().catch(() => {}); refreshAgent(); }
       if (tab === 'journal') loadJournal().catch(() => {});
     });
   });
@@ -293,143 +294,88 @@ function bindUI() {
   $('#settingsForm').addEventListener('submit', saveSettings);
   $('#btnTestLogin').addEventListener('click', () => control('test-login'));
 
-  /* ---------- Обучение бота (picker в VNC) ---------- */
-  let pickPoll = null;
+  /* ---------- ИИ-агент ---------- */
+  const AI_ICON = { click:'🖱', type:'⌨️', key:'⌨️', scroll:'↕', goto:'🌐', back:'↩', done:'✅', fail:'⚠️' };
 
-  async function refreshPickStatus() {
-    try {
-      const r = await api('/api/picker/picks');
-      const st = $('#pickStatus');
-      if (st) st.textContent = r.active
-        ? '🟢 Обучение включено — панель управления находится в VNC'
-        : '⚪ Обучение выключено';
-      if (r.active) loadSteps();
-    } catch { /* ignore */ }
+  function renderAgent(st) {
+    const box = $('#aiLive');
+    if (!box) return;
+    if (!st || (!st.running && !st.lastAction)) { box.innerHTML = ''; return; }
+    box.innerHTML = `
+      <div class="ai-live-head">${st.running ? '<span class="ai-dot"></span> Агент работает' : '⏹ Агент остановлен'}
+        ${st.step ? `<span class="ai-step">шаг ${st.step}</span>` : ''}</div>
+      ${st.task ? `<div class="ai-task">🎯 ${escapeHtml(st.task)}</div>` : ''}
+      ${st.lastAction ? `<div class="ai-act">${escapeHtml(st.lastAction)}</div>` : ''}`;
   }
 
-  $('#btnPickStart').addEventListener('click', async () => {
+  async function refreshAgent() {
+    try { renderAgent(await api('/api/ai/state')); } catch { /* ignore */ }
+  }
+
+  $('#btnAiRun').addEventListener('click', async () => {
+    const task = $('#aiTask').value.trim();
+    if (!task) { toast('Напишите команду'); return; }
+    const btn = $('#btnAiRun');
+    btn.disabled = true;
+    btn.textContent = '⏳ Агент работает…';
     try {
-      const r = await api('/api/picker/start', {
+      const r = await api('/api/ai/run', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ url: $('#pickUrl').value }),
+        body: JSON.stringify({ task }),
       });
-      if (!r.ok) { toast('❌ ' + (r.reason || 'Не удалось открыть')); return; }
-      toast('🎯 Готово! Откройте вкладку VNC — панель обучения уже там');
-      refreshPickStatus();
-      if (!pickPoll) pickPoll = setInterval(() => { refreshPickStatus(); }, 3000);
+      if (!r.ok) toast('❌ ' + (r.reason || 'Ошибка'));
+      else if (r.done) toast(`✅ Готово за ${r.steps} шаг(ов)`);
+      else toast('⚠️ ' + (r.reason || 'Не завершено'));
     } catch (e) { toast('Ошибка: ' + e.message); }
-  });
-  $('#btnPickReinject').addEventListener('click', async () => {
-    await api('/api/picker/reinject', { method: 'POST' });
-    toast('↻ Панель обучения обновлена в VNC');
-  });
-  $('#btnPickStop').addEventListener('click', async () => {
-    await api('/api/picker/stop', { method: 'POST' });
-    clearInterval(pickPoll); pickPoll = null;
-    toast('✕ Обучение остановлено');
-    refreshPickStatus();
+    btn.disabled = false;
+    btn.textContent = '🚀 Выполнить команду';
+    refreshAgent();
+    loadJournal().catch(() => {});
   });
 
-  /* ---------- Что делает бот (шаги) ---------- */
-  const ACT_ICONS = { open: '🌐', click: '🖱', check: '👁', accept: '✅', back: '↩', wait: '⏳' };
-  const ACT_NAMES = { open: 'Открыть страницу', click: 'Нажать', check: 'Проверить', accept: 'Принять заявку', back: 'Вернуться назад', wait: 'Подождать' };
-
-  async function loadSteps() {
-    try {
-      const r = await api('/api/steps');
-      renderSteps(r.steps || []);
-    } catch { /* ignore */ }
-  }
-
-  function renderSteps(steps) {
-    const out = $('#stepsOut');
-    const flow = $('#stepsFlow');
-    if (!steps.length) {
-      out.innerHTML = '<div class="hint">Шагов пока нет. Включите обучение и покажите боту действия в VNC — они появятся здесь.</div>';
-      flow.innerHTML = '';
-      return;
-    }
-    out.innerHTML = '';
-    steps.forEach((st, i) => {
-      const row = document.createElement('div');
-      row.className = 'card';
-      row.style.cssText = 'padding:11px;display:flex;align-items:center;gap:9px;flex-wrap:wrap';
-      const acts = [
-        ['click', '🖱 Нажать'], ['accept', '✅ Принять'], ['check', '👁 Проверить'],
-        ['open', '🌐 Открыть'], ['back', '↩ Назад'], ['wait', '⏳ Подождать'],
-      ];
-      const actSel = `<select class="act-sel" data-act="${i}" style="padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:#0c1118;color:var(--text);font-size:12px">${acts.map(([v, l]) => `<option value="${v}" ${st.act === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
-      row.innerHTML = `
-        <div class="step-num">${i + 1}</div>
-        <div style="flex:1;min-width:0">
-          <div style="font-size:14px">${ACT_ICONS[st.act] || '•'} <b>${escapeHtml(st.note || ACT_NAMES[st.act] || st.act)}</b></div>
-        </div>
-        ${actSel}
-        <button class="btn btn-ghost btn-sm" data-mv="${i}" data-d="-1" ${i === 0 ? 'disabled' : ''}>↑</button>
-        <button class="btn btn-ghost btn-sm" data-mv="${i}" data-d="1" ${i === steps.length - 1 ? 'disabled' : ''}>↓</button>
-        <button class="btn btn-danger btn-sm" data-del="${i}">🗑</button>`;
-      out.appendChild(row);
+  $('#aiForm').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const f = $('#aiForm');
+    const patch = {};
+    for (const el of f.elements) { if (el.name) patch[el.name] = el.value; }
+    await api('/api/settings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(patch),
     });
-    out.querySelectorAll('button[data-mv]').forEach((b) =>
-      b.addEventListener('click', () => moveStep(Number(b.dataset.mv), Number(b.dataset.d))));
-    out.querySelectorAll('button[data-del]').forEach((b) =>
-      b.addEventListener('click', () => delStep(Number(b.dataset.del))));
-    out.querySelectorAll('select.act-sel').forEach((sel) =>
-      sel.addEventListener('change', async () => {
-        const r2 = await api('/api/steps');
-        const arr = r2.steps || [];
-        const idx = Number(sel.dataset.act);
-        if (arr[idx]) { arr[idx].act = sel.value; await persistSteps(arr); }
-      }));
+    toast('✅ Настройки ИИ сохранены');
+    loadSettings().catch(() => {});
+  });
 
-    flow.innerHTML = steps.map((st, i) =>
-      `<div class="flow-item"><span class="flow-i">${i + 1}</span> ${ACT_ICONS[st.act] || '•'} ${escapeHtml((ACT_NAMES[st.act] || st.act))}${st.note ? ' · ' + escapeHtml(st.note.slice(0, 22)) : ''}</div>`
-    ).join('<div class="flow-arrow">↓</div>') + '<div class="flow-arrow">↻</div><div class="flow-item loop">Повтор с шага 1</div>';
-  }
-
-  async function persistSteps(steps) {
-    await api('/api/steps', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ steps }) });
-    renderSteps(steps);
-  }
-  async function moveStep(i, d) {
-    const r = await api('/api/steps');
-    const steps = r.steps || [];
-    const j = i + d;
-    if (j < 0 || j >= steps.length) return;
-    [steps[i], steps[j]] = [steps[j], steps[i]];
-    await persistSteps(steps);
-  }
-  async function delStep(i) {
-    const r = await api('/api/steps');
-    await persistSteps((r.steps || []).filter((_, idx) => idx !== i));
-  }
-
-  $('#btnStepsRefresh').addEventListener('click', loadSteps);
-  $('#btnStepsClear').addEventListener('click', async () => {
-    await persistSteps([]);
-    toast('🗑 Все шаги удалены');
+  $('#btnAiTest').addEventListener('click', async () => {
+    const out = $('#aiTestOut');
+    out.textContent = '⏳ Проверяю ключ…';
+    try {
+      const r = await api('/api/ai/test', { method: 'POST' });
+      out.textContent = r.ok
+        ? `✅ Ключ работает. Доступно моделей: ${r.models}. Модель ${r.model}: ${r.modelFound ? 'найдена' : 'не найдена — выберите другую'}`
+        : '❌ ' + (r.reason || 'Ключ не подошёл');
+    } catch (e) { out.textContent = 'Ошибка: ' + e.message; }
   });
 
   /* ---------- Помощь (?) ---------- */
   const HELP = {
-    teach: ['🎯 Обучение бота', `Покажите боту действия «за руку» — программист не нужен:<br><br>
-<b>1.</b> Остановите бота: ⏹ Стоп (сверху)<br>
-<b>2.</b> Нажмите <b>🎯 Начать</b><br>
-<b>3.</b> Откройте вкладку <b>VNC</b> — сверху страницы появится синяя панель<br>
-<b>4.</b> Нажмите на нужный элемент сайта → появится зелёная панель с вопросом:<br>
-&nbsp;&nbsp;• <b>✓ Просто нажать</b> — обычная кнопка, страница не меняется<br>
-&nbsp;&nbsp;• <b>→ Нажать и открыть страницу</b> — шаг сохранится И вы реально перейдёте внутрь<br>
-&nbsp;&nbsp;• <b>✅ Это «Принять заявку»</b> — главное действие, с защитой от повторов<br>
-&nbsp;&nbsp;• <b>👁 Проверить</b> — бот будет ждать появления этого элемента (например «Принято»)<br>
-<b>5.</b> Шаги сразу появятся ниже в списке. Внутри новой страницы продолжайте так же.<br>
-<b>6.</b> Кнопки <b>↩ Назад / ⤴ Вперёд</b> в панели VNC — перемещение по страницам<br>
-<b>7.</b> Закончили → <b>✕ Закончить</b>, затем ▶ Старт`],
-    steps: ['📋 Что делает бот', `Список шагов = сценарий бота. Он выполняет их сверху вниз, потом начинает заново.<br><br>
-<b>↑ ↓</b> — поменять порядок<br>
-<b>🗑</b> — удалить ошибочный шаг<br><br>
-Ниже — схема: наглядно видно, что бот делает по кругу.<br><br>
-Совет: чтобы бот не путался, когда заявки быстро меняются, добавьте после «Принять» шаг <b>👁 Проверить</b> — бот дождётся подтверждения и только потом пойдёт дальше.`],
+    ai: ['🤖 ИИ-агент', `Агент видит экран браузера и сам нажимает нужные кнопки — как человек.<br><br>
+<b>Как пользоваться:</b><br>
+1. Вставьте Gemini API Key (ниже) и сохраните<br>
+2. Напишите команду обычными словами, например:<br>
+&nbsp;&nbsp;<i>«Открой список заявок и прими первую новую заявку»</i><br>
+&nbsp;&nbsp;<i>«Войди на сайт: логин admin, пароль 12345»</i><br>
+&nbsp;&nbsp;<i>«Найди заявку №184 и нажми Принять, потом подтверди в окне»</i><br>
+3. Нажмите <b>🚀 Выполнить команду</b> — ниже увидите каждый шаг агента<br>
+4. В любой момент откройте вкладку <b>VNC</b> и смотрите работу глазами<br><br>
+<b>Круглосуточная работа:</b> заполните «Постоянную инструкцию», выберите режим <b>🤖 ИИ-агент</b> и нажмите ▶ Старт — агент будет повторять инструкцию сам.`],
+    aikey: ['🔑 Где взять ключ', `1. Откройте <b>aistudio.google.com/apikey</b><br>
+2. Войдите Google-аккаунтом<br>
+3. Нажмите «Create API key» → скопируйте (начинается на <code>AIza…</code>)<br>
+4. Вставьте здесь и нажмите <b>Сохранить</b>, затем <b>Проверить ключ</b><br><br>
+Ключ хранится только на вашем сервере. Модель <b>gemini-2.0-flash</b> — оптимальна по цене и скорости.`],
     povedenie: ['⚙️ Поведение', `<b>Скорость ×</b> — множитель пауз. 0.5 = быстрее, 2 = медленнее и осторожнее.<br><br>
 <b>Задержка, мс</b> — базовая пауза между действиями (800 мс = как человек).<br><br>
 <b>Keep-alive, сек</b> — как часто бот «напоминает о себе» сайту, чтобы сессия не истекла. 180 сек — оптимально.`],

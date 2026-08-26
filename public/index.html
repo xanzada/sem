@@ -82,29 +82,42 @@
 
   <!-- ===== НАСТРОЙКИ ===== -->
   <section class="tab-page" data-tab="settings">
-    <div class="card form" style="margin-bottom:14px">
-      <div class="divider" style="border:none;margin-top:0;padding-top:0">🎯 Обучение бота <span class="qmark" data-help="teach">?</span></div>
-      <div class="hint">Покажите боту, что делать: остановите бота → «Начать» → перейдите во вкладку <b>VNC</b> → нажимайте на элементы сайта и отвечайте на вопрос в зелёной панели. Шаги появятся ниже сразу.</div>
-      <div class="form-row two">
-        <div><label>Начать со страницы (пусто = сайт из настроек)</label><input type="url" id="pickUrl" placeholder="https://..."></div>
-        <div style="display:flex;gap:6px;align-items:flex-end">
-          <button class="btn btn-primary btn-sm" id="btnPickStart">🎯 Начать</button>
-          <button class="btn btn-ghost btn-sm" id="btnPickReinject">↻ Панель</button>
-          <button class="btn btn-danger btn-sm" id="btnPickStop">✕ Стоп</button>
-        </div>
-      </div>
-      <div style="margin-top:10px"><span class="hint" id="pickStatus"></span></div>
-    </div>
+    <div class="card form ai-card">
+      <div class="divider" style="border:none;margin-top:0;padding-top:0">🤖 ИИ-агент <span class="qmark" data-help="ai">?</span></div>
+      <div class="hint">Агент видит экран браузера и сам нажимает нужные кнопки. Напишите команду обычными словами — он выполнит.</div>
 
-    <div class="card form" style="margin-bottom:14px">
-      <div class="divider" style="border:none;margin-top:0;padding-top:0">📋 Что делает бот (по порядку) <span class="qmark" data-help="steps">?</span></div>
-      <div id="stepsOut" style="display:flex;flex-direction:column;gap:8px"></div>
-      <div class="section-title" style="margin:16px 4px 8px">Схема работы бота</div>
-      <div id="stepsFlow" class="flow"></div>
-      <div style="display:flex;gap:8px;margin-top:12px">
-        <button class="btn btn-ghost btn-sm" id="btnStepsRefresh">↻ Обновить</button>
-        <button class="btn btn-danger btn-sm" id="btnStepsClear">🗑 Удалить всё</button>
+      <div class="form-row">
+        <label>Команда агенту</label>
+        <textarea id="aiTask" rows="3" placeholder="Например: Открой список заявок и прими первую новую заявку"></textarea>
       </div>
+      <button class="btn btn-primary wide big" id="btnAiRun">🚀 Выполнить команду</button>
+      <div id="aiLive" class="ai-live"></div>
+
+      <div class="divider">Ключ доступа Gemini <span class="qmark" data-help="aikey">?</span></div>
+      <form id="aiForm" autocomplete="off">
+        <div class="form-row">
+          <label>Gemini API Key</label>
+          <input type="password" name="aiApiKey" placeholder="AIza..." autocomplete="new-password">
+        </div>
+        <div class="form-row">
+          <label>Модель</label>
+          <select name="aiModel">
+            <option value="gemini-2.0-flash">gemini-2.0-flash — быстрая (рекомендуется)</option>
+            <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite — самая дешёвая</option>
+            <option value="gemini-2.5-flash">gemini-2.5-flash — умнее</option>
+            <option value="gemini-2.5-pro">gemini-2.5-pro — максимум</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label>Постоянная инструкция (для режима «ИИ-агент» 24/7)</label>
+          <textarea name="aiInstruction" rows="3" placeholder="Например: Проверяй список заявок. Если есть новая заявка со статусом «В обработке» — открой её и нажми «Принять». Потом вернись к списку."></textarea>
+        </div>
+        <div class="btn-row">
+          <button type="submit" class="btn btn-primary wide big">💾 Сохранить</button>
+          <button type="button" class="btn btn-ghost wide big" id="btnAiTest">🔑 Проверить ключ</button>
+        </div>
+        <div id="aiTestOut" class="hint" style="margin-top:8px"></div>
+      </form>
     </div>
 
     <form class="card form" id="settingsForm" autocomplete="off">
@@ -112,8 +125,9 @@
         <div>
           <label>Режим работы <span class="qmark" data-help="mode">?</span></label>
           <select name="mode" id="modeSel">
-            <option value="simulation">Демо (без сайта)</option>
-            <option value="live">Боевой (реальный сайт)</option>
+            <option value="ai">🤖 ИИ-агент (по инструкции)</option>
+            <option value="live">Боевой (по шагам)</option>
+            <option value="simulation">Демо (учебный сайт)</option>
           </select>
         </div>
         <div>
@@ -129,24 +143,6 @@
         <div><label>Пароль</label><input type="password" name="password" placeholder="••••••••"></div>
       </div>
       <div class="form-row"><label>URL списка заявок (необязательно)</label><input type="url" name="listUrl" placeholder="https://example.kz/applications"></div>
-
-      <details class="sel-details">
-        <summary>Селекторы формы входа (если сайт нестандартный)</summary>
-        <div class="hint">Пример для hub.alemi.kz:
-<code>{"user":["#hub-identifier"],"password":["#hub-password"],"submit":[".partner-auth-submit"]}</code></div>
-        <textarea name="loginSelectorsJson" rows="3" placeholder='{"user": [...], "password": [...], "submit": [...]}'></textarea>
-      </details>
-
-      <details class="sel-details">
-        <summary>Селекторы элементов сайта (JSON)</summary>
-        <div class="hint">Заполняется после анализа сайта по вашим скриншотам. Пример:
-<code>{"listRow":"table tbody tr","openLink":"a","statusPending":".status-pending","statusAccepted":".status-accepted","acceptButton":"#acceptBtn"}</code></div>
-        <textarea name="selectorsJson" rows="5" placeholder='{"listRow": ["...", "..."], "acceptButton": "..."}'></textarea>
-        <div class="form-row" style="margin-top:10px">
-          <button type="button" class="btn btn-ghost btn-sm" id="btnSelHealth">🧪 Проверить селекторы на сайте</button>
-          <div id="selHealthOut" class="hint" style="margin-top:8px"></div>
-        </div>
-      </details>
 
       <div class="divider">Поведение <span class="qmark" data-help="povedenie">?</span></div>
       <div class="form-row three">

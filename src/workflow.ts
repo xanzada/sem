@@ -518,3 +518,31 @@ export function parseSteps(): Step[] {
   }
   return [];
 }
+
+/** Постоянный ИИ-режим: агент сам смотрит на экран и делает работу по инструкции. */
+export class AiLoopDriver implements WorkflowDriver {
+  name = 'ai';
+
+  async cycle(ctx: DriverCtx): Promise<void> {
+    const s = getAllSettings();
+    const instruction = String(s.aiInstruction || '').trim();
+    if (!instruction) throw new MissingSelectorsError();
+
+    ctx.setStep('ИИ-агент смотрит на экран…');
+    const { runAiTask } = await import('./agent.js');
+    const r = await runAiTask(instruction, 20);
+
+    if (!r.ok) {
+      ctx.log('warn', 'WORKFLOW', `ИИ-агент: ${r.reason ?? 'ошибка'}`);
+      await ctx.delay(6);
+      return;
+    }
+    if (r.done) {
+      ctx.log('success', 'WORKFLOW', `ИИ-агент завершил проход (${r.steps} шаг.)`);
+    } else {
+      ctx.log('info', 'WORKFLOW', `ИИ-агент: ${r.reason ?? 'нет новых заявок'}`);
+    }
+    ctx.setStep('Пауза между проходами');
+    await ctx.delay(8);
+  }
+}
