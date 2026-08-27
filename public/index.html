@@ -119,12 +119,13 @@
       </div>
       <div class="field">
         <label>Модель (пишите точное название)</label>
-        <input type="text" name="aiModel" class="mono" list="modelList" placeholder="gemini-2.5-flash" autocomplete="off" spellcheck="false">
+        <input type="text" name="aiModel" class="mono" list="modelList" placeholder="gemini-flash-latest" autocomplete="off" spellcheck="false">
         <datalist id="modelList">
-          <option value="gemini-2.5-flash"></option>
-          <option value="gemini-2.5-pro"></option>
-          <option value="gemini-2.0-flash"></option>
           <option value="gemini-flash-latest"></option>
+          <option value="gemini-3.5-flash"></option>
+          <option value="gemini-3.1-flash-lite"></option>
+          <option value="gemini-3-flash-preview"></option>
+          <option value="gemini-2.5-pro"></option>
           <option value="google/gemini-2.5-flash"></option>
           <option value="anthropic/claude-sonnet-4.5"></option>
           <option value="openai/gpt-4o"></option>
@@ -133,7 +134,7 @@
       <div class="field">
         <label>Провайдер</label>
         <div class="seg" id="provSeg">
-          <button type="button" class="seg-btn" data-base="" data-model="gemini-2.5-flash">Gemini</button>
+          <button type="button" class="seg-btn" data-base="" data-model="gemini-flash-latest">Gemini</button>
           <button type="button" class="seg-btn" data-base="https://api.openai.com/v1" data-model="gpt-4o">OpenAI</button>
           <button type="button" class="seg-btn" data-base="https://openrouter.ai/api/v1" data-model="google/gemini-2.5-flash">OpenRouter</button>
           <button type="button" class="seg-btn" data-base="custom">Свой</button>
@@ -177,7 +178,10 @@
       <div class="field"><label>Адрес сайта</label><input type="url" name="siteUrl" placeholder="https://example.kz"></div>
       <div class="field"><label>Страница со заявками (необязательно)</label><input type="url" name="listUrl" placeholder="https://example.kz/orders"></div>
       <div class="field"><label>Логин</label><input type="text" name="username" placeholder="login" autocomplete="off"></div>
-      <div class="field"><label>Пароль</label><input type="password" name="password" placeholder="••••••••" autocomplete="new-password"></div>
+      <div class="field">
+        <label>Пароль <span class="key-state" data-state-for="password"></span></label>
+        <input type="password" name="password" placeholder="••••••••" autocomplete="new-password">
+      </div>
       <button type="submit" class="btn primary block">Сохранить</button>
     </form>
 
@@ -220,7 +224,7 @@
     <!-- 7. Telegram -->
     <form class="card" data-save>
       <div class="card-head"><h2>📨 Уведомления</h2><span class="qmark" data-help="telegram">?</span></div>
-      <div class="field"><label>Telegram bot token</label><input type="password" name="telegramToken" placeholder="••••••••" autocomplete="new-password"></div>
+      <div class="field"><label>Telegram bot token <span class="key-state" data-state-for="telegramToken"></span></label><input type="password" name="telegramToken" placeholder="••••••••" autocomplete="new-password"></div>
       <div class="field"><label>Chat ID</label><input type="text" name="telegramChatId" placeholder="123456789"></div>
       <button type="submit" class="btn primary block">Сохранить</button>
     </form>

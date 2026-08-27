@@ -75,7 +75,7 @@ export async function runAiTask(task: string, maxSteps = 25): Promise<{
     const res = await runAgentSession({
       page,
       key: String(s.aiApiKey),
-      model: String(s.aiModel || 'gemini-2.0-flash'),
+      model: String(s.aiModel || 'gemini-flash-latest'),
       baseUrl: String(s.aiBaseUrl || ''),
       task,
       maxSteps,

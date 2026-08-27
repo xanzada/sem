@@ -159,6 +159,16 @@ async function loadSettings(force) {
   const sp = $('#speedRange');
   if (sp) { sp.value = s.speed; $('#speedVal').textContent = '×' + Number(s.speed); }
 
+  /* Секреты сервер наружу не отдаёт, поэтому поле остаётся пустым —
+   * без этой подписи кажется, что пароль не сохранился. */
+  $$('[data-state-for]').forEach((tag) => {
+    const saved = s[tag.dataset.stateFor + 'Set'] === true;
+    tag.textContent = saved ? '· сохранён' : '· не задан';
+    tag.className = 'key-state ' + (saved ? 'ok' : 'no');
+    const input = document.querySelector(`[name=${tag.dataset.stateFor}]`);
+    if (input && saved && !input.value) input.placeholder = 'Сохранён — оставьте пустым или введите новый';
+  });
+
   const ks = $('#keyState');
   if (ks) {
     ks.textContent = s.aiApiKeySet ? '· сохранён' : '· не задан';
@@ -182,13 +192,22 @@ async function loadSettings(force) {
 
 let vncLoaded = false;
 async function loadVnc() {
-  if (vncLoaded) return;
+  const el = $('#vncWrap');
+  if (!el) return;
+  if (vncLoaded && el.querySelector('iframe')) return;
+  el.innerHTML = '<div class="hint" style="padding:16px">⏳ Подключаюсь к экрану…</div>';
   const meta = await api('/api/meta').catch(() => ({}));
-  const html = meta.vncUrl
-    ? `<iframe src="${meta.vncUrl}" allow="clipboard-read; clipboard-write"></iframe>`
-    : '<div class="hint" style="padding:16px">Экран пока недоступен: noVNC не запущен.</div>';
-  const el = $('#vncWrap'); if (el) el.innerHTML = html;
-  vncLoaded = !!meta.vncUrl;
+  if (meta.vncUrl) {
+    el.innerHTML = `<iframe src="${meta.vncUrl}" allow="clipboard-read; clipboard-write"></iframe>`;
+    vncLoaded = true;
+  } else {
+    el.innerHTML =
+      '<div class="hint" style="padding:16px">Экран пока недоступен: noVNC не запущен.<br><br>' +
+      '<button class="btn ghost block" id="btnVncRetry">Повторить</button></div>';
+    vncLoaded = false;
+    const rb = $('#btnVncRetry');
+    if (rb) rb.addEventListener('click', () => loadVnc().catch(() => {}));
+  }
 }
 
 function bindSaveForms() {
@@ -390,7 +409,8 @@ $$('.tab').forEach((b) => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
     if (t === 'analytics') loadStats().catch(() => {});
     if (t === 'settings') { loadSettings().catch(() => {}); refreshAgent(); }
-    if (t === 'vnc')     if (t === 'journal') loadJournal().catch(() => {});
+    if (t === 'vnc') loadVnc().catch(() => {});
+    if (t === 'journal') loadJournal().catch(() => {});
   });
 });
 

@@ -546,6 +546,26 @@ export class AiLoopDriver implements WorkflowDriver {
       ctx.log('info', 'WORKFLOW', `Проход окончен: ${r.reason ?? 'нет изменений'}`);
     }
 
+    /* Исчерпанная дневная квота не лечится повтором через 5 минут: каждая
+     * попытка тратит ещё один запрос и засыпает журнал одинаковой ошибкой.
+     * Ждём час и говорим оператору, что именно нужно сделать. */
+    const quotaHit = /429|quota|RESOURCE_EXHAUSTED/i.test(String(r.reason ?? ''));
+    if (quotaHit) {
+      const waitMin = 60;
+      ctx.log(
+        'warn',
+        'CONTROL',
+        `Дневная квота модели исчерпана. Пауза ${waitMin} мин. Чтобы работать без ограничений — подключите биллинг в Google AI Studio либо укажите другого провайдера (Настройки → Доступ к модели → Base URL).`
+      );
+      ctx.setStep(`Квота исчерпана · ждём ${waitMin} мин`);
+      const until = Date.now() + waitMin * 60000;
+      while (Date.now() < until) {
+        await sleep(2000);
+        if (!ctx.alive?.()) return;
+      }
+      return;
+    }
+
     const min = Math.max(0, Math.min(720, Number(s.aiIntervalMin) ?? 5));
     if (min <= 0) {
       ctx.setStep('Следующий проход сразу');
