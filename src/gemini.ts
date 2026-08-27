@@ -73,7 +73,7 @@ export function isGeminiApi(base?: string): boolean {
 }
 
 /** Один вызов модели: скриншот + задача → следующее действие. */
-export async function decide(opts: {
+async function decideOnce(opts: {
   key: string;
   model: string;
   baseUrl?: string;
@@ -98,14 +98,29 @@ export async function decide(opts: {
           contents: [
             { role: 'user', parts: [{ text }, { inline_data: { mime_type: 'image/jpeg', data: b64 } }] },
           ],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 400, responseMimeType: 'application/json' },
+          /* Лимит большой, а «размышления» отключены: у 2.5+/3.x модели
+           * thinking-токены съедали весь бюджет и ответ обрывался на середине
+           * JSON (finishReason=MAX_TOKENS, пустой content). */
+          generationConfig: {
+            temperature: 0.2,
+            maxOutputTokens: 2048,
+            responseMimeType: 'application/json',
+            thinkingConfig: { thinkingBudget: 0 },
+          },
         }),
         signal: AbortSignal.timeout(70000),
       }
     );
     if (!r.ok) throw new Error(`API ${r.status}: ${(await r.text().catch(() => '')).slice(0, 160)}`);
-    const j = (await r.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
-    return parseAction(j.candidates?.[0]?.content?.parts?.[0]?.text ?? '');
+    const j = (await r.json()) as {
+      candidates?: { content?: { parts?: { text?: string }[] }; finishReason?: string }[];
+    };
+    const cand = j.candidates?.[0];
+    const raw = cand?.content?.parts?.map((p) => p.text ?? '').join('') ?? '';
+    if (!raw.trim()) {
+      throw new Error(`Модель не вернула текст (finishReason=${cand?.finishReason ?? 'нет'})`);
+    }
+    return parseAction(raw);
   }
 
   /* OpenAI-совместимый эндпоинт (OpenRouter, vLLM, LM Studio, прокси и т.д.) */
@@ -115,7 +130,7 @@ export async function decide(opts: {
     body: JSON.stringify({
       model: opts.model,
       temperature: 0.2,
-      max_tokens: 400,
+      max_tokens: 2048,
       messages: [
         {
           role: 'user',
@@ -131,6 +146,43 @@ export async function decide(opts: {
   if (!r.ok) throw new Error(`API ${r.status}: ${(await r.text().catch(() => '')).slice(0, 160)}`);
   const j = (await r.json()) as { choices?: { message?: { content?: string } }[] };
   return parseAction(j.choices?.[0]?.message?.content ?? '');
+}
+
+/** Перегрузка модели и обрыв связи — не ошибка задачи, а повод подождать. */
+function isTransient(e: unknown): boolean {
+  const s = String(e);
+  return (
+    /API (429|500|502|503|504)/.test(s) ||
+    /aborted due to timeout/i.test(s) ||
+    /fetch failed|ECONNRESET|ETIMEDOUT/i.test(s) ||
+    /не вернула текст|вернула не JSON/i.test(s)
+  );
+}
+
+const RETRY_DELAYS_MS = [4000, 12000, 30000];
+
+export async function decide(opts: {
+  key: string;
+  model: string;
+  baseUrl?: string;
+  task: string;
+  history: string[];
+  shotJpeg: Buffer;
+  width: number;
+  height: number;
+  url: string;
+}): Promise<AiAction> {
+  let last: unknown;
+  for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+    try {
+      return await decideOnce(opts);
+    } catch (e) {
+      last = e;
+      if (!isTransient(e) || attempt === RETRY_DELAYS_MS.length) break;
+      await new Promise((res) => setTimeout(res, RETRY_DELAYS_MS[attempt]));
+    }
+  }
+  throw last instanceof Error ? last : new Error(String(last));
 }
 
 /** Проверка ключа и доступности модели. */
