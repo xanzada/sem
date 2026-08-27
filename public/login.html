@@ -70,11 +70,13 @@ document.getElementById('f').addEventListener('submit', function (ev) {
     }),
   }).then(function (r) {
     if (!r.ok) { e.classList.add('show'); return; }
-    /* даём браузеру шанс предложить сохранение пароля: настоящий submit формы */
+    /* Настоящий submit, чтобы браузер предложил сохранить пароль.
+     * POST на /login-form — пароль остаётся в теле запроса и не попадает
+     * ни в адресную строку, ни в историю браузера. */
     var f = document.getElementById('f');
     f.removeAttribute('id');
-    f.action = '/';
-    f.method = 'get';
+    f.action = '/login-form';
+    f.method = 'post';
     f.submit();
   }).catch(function () { e.classList.add('show'); });
 });

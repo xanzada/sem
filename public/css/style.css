@@ -144,7 +144,7 @@ input[type=range] { padding: 0; accent-color: var(--acc); border: none; backgrou
 
 .switch-row {
   display: flex; align-items: center; justify-content: space-between; gap: 14px;
-  padding: 11px 0 13px; border-top: 1px dashed var(--line);
+  padding: 12px 0 0; border-top: 1px dashed var(--line);
 }
 .switch-label { font-size: 13px; color: var(--txt); flex: 1; }
 .switch { position: relative; width: 48px; height: 27px; flex: 0 0 auto; }

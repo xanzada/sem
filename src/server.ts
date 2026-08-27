@@ -79,7 +79,11 @@ function authed(req: any): boolean {
 function vncLocalUrl(): string {
   if (NOVNC_PUBLIC_URL) return NOVNC_PUBLIC_URL;
   if (process.env.SEM_VNC_LOCAL === '1') {
-    return '/vnc/vnc.html?autoconnect=1&resize=remote&reconnect=1&reconnect_delay=1500&show_dot=1&path=vnc/websockify';
+    /* resize=scale, а не remote: Xvfb за x11vnc отказывает в изменении
+     * разрешения («Resize is administratively prohibited»), и тогда noVNC
+     * показывает только левый верхний угол экрана — со стороны это выглядит
+     * как пустой экран. Масштабирование на стороне клиента показывает всё. */
+    return '/vnc/vnc.html?autoconnect=1&resize=scale&reconnect=1&reconnect_delay=1500&show_dot=1&quality=6&compression=2&path=vnc/websockify';
   }
   return '';
 }
@@ -174,7 +178,8 @@ export async function buildServer(engine: Engine): Promise<void> {
       u === '/api/login' ||
       u === '/login-form' ||
       u === '/logout' ||
-      u === '/icon.svg'
+      u === '/icon.svg' ||
+      u === '/manifest.webmanifest'
     ) {
       return;
     }
