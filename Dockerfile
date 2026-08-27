@@ -16,7 +16,6 @@ COPY tsconfig.json ./
 COPY src ./src
 COPY public ./public
 RUN npm run build
-RUN npx playwright install chrome || echo "chrome channel unavailable, using bundled chromium"
 RUN npm prune --omit=dev
 
 ENV NODE_ENV=production \

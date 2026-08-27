@@ -23,10 +23,13 @@ const LAUNCH_ARGS = [
   '--disable-dev-shm-usage',
 ];
 
+/* Канал браузера: в образе playwright есть только собственный chromium,
+ * поэтому channel:'chrome' включается только явным SEM_BROWSER_CHANNEL. */
+const BROWSER_CHANNEL = (process.env.SEM_BROWSER_CHANNEL ?? '').trim();
+
 export async function getContext(): Promise<BrowserContext> {
   if (ctx) return ctx;
-  ctx = await chromium.launchPersistentContext(PROFILE_DIR, {
-    channel: 'chrome',
+  const base = {
     headless: HEADLESS,
     args: NO_SANDBOX ? LAUNCH_ARGS : LAUNCH_ARGS.slice(0, 7),
     viewport: { width: 1280, height: 760 },
@@ -35,18 +38,13 @@ export async function getContext(): Promise<BrowserContext> {
     locale: 'ru-RU',
     timezoneId: process.env.TZ || 'Asia/Almaty',
     ignoreHTTPSErrors: true,
-    colorScheme: 'light',
-  }).catch(async () =>
-    chromium.launchPersistentContext(PROFILE_DIR, {
-      headless: HEADLESS,
-      args: NO_SANDBOX ? LAUNCH_ARGS : LAUNCH_ARGS.slice(0, 7),
-      viewport: { width: 1280, height: 760 },
-      screen: { width: 1280, height: 800 },
-      locale: 'ru-RU',
-      timezoneId: process.env.TZ || 'Asia/Almaty',
-      ignoreHTTPSErrors: true,
-    })
-  );
+    colorScheme: 'light' as const,
+  };
+  ctx = BROWSER_CHANNEL
+    ? await chromium
+        .launchPersistentContext(PROFILE_DIR, { ...base, channel: BROWSER_CHANNEL })
+        .catch(async () => chromium.launchPersistentContext(PROFILE_DIR, base))
+    : await chromium.launchPersistentContext(PROFILE_DIR, base);
   return ctx;
 }
 

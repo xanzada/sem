@@ -7,7 +7,7 @@ services:
     ports:
       - "127.0.0.1:8090:8080"
     volumes:
-      - ./data:/app/data
+      - /opt/sem/data:/app/data
     networks:
       - dokploy-network
     environment:
