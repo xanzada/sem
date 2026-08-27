@@ -36,7 +36,7 @@ export const DEFAULT_SETTINGS: SemSettings = {
   password: '',
   loginSelectorsJson: '',
   aiApiKey: '',
-  aiModel: 'gemini-2.0-flash',
+  aiModel: 'gemini-flash-latest',
   aiBaseUrl: '',
   aiInstruction: '',
   aiIntervalMin: 5,
