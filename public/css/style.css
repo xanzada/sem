@@ -213,6 +213,9 @@ details.adv > * + * { margin-top: 12px; }
 /* ---------- chart / table ---------- */
 .chart-box { height: 210px; }
 .table-wrap { overflow-x: auto; margin: 0 -4px; }
+/* Отрицательные боковые отступы не должны съедать вертикальный ритм карточки. */
+.card > .table-wrap { margin-top: 13px; }
+.card > .feed { margin-top: 9px; }
 .tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .tbl th { text-align: left; padding: 8px 6px; color: var(--dim); font-weight: 600; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .tbl td { padding: 9px 6px; border-bottom: 1px solid rgba(29,38,52,.55); }
