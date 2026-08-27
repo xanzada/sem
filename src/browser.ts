@@ -13,7 +13,12 @@ let ctx: BrowserContext | null = null;
 const LAUNCH_ARGS = [
   '--disable-blink-features=AutomationControlled',
   '--no-first-run',
+  '--no-default-browser-check',
   '--hide-crash-restore-bubble',
+  '--disable-features=Translate,MediaRouter,OptimizationGuideModelDownloading',
+  '--force-color-profile=srgb',
+  '--font-render-hinting=medium',
+  '--enable-font-antialiasing',
   '--no-sandbox',
   '--disable-dev-shm-usage',
 ];
@@ -21,12 +26,27 @@ const LAUNCH_ARGS = [
 export async function getContext(): Promise<BrowserContext> {
   if (ctx) return ctx;
   ctx = await chromium.launchPersistentContext(PROFILE_DIR, {
+    channel: 'chrome',
     headless: HEADLESS,
-    args: NO_SANDBOX ? LAUNCH_ARGS : LAUNCH_ARGS.slice(0, 2),
+    args: NO_SANDBOX ? LAUNCH_ARGS : LAUNCH_ARGS.slice(0, 7),
     viewport: { width: 1280, height: 760 },
     screen: { width: 1280, height: 800 },
+    deviceScaleFactor: 1,
+    locale: 'ru-RU',
+    timezoneId: process.env.TZ || 'Asia/Almaty',
     ignoreHTTPSErrors: true,
-  });
+    colorScheme: 'light',
+  }).catch(async () =>
+    chromium.launchPersistentContext(PROFILE_DIR, {
+      headless: HEADLESS,
+      args: NO_SANDBOX ? LAUNCH_ARGS : LAUNCH_ARGS.slice(0, 7),
+      viewport: { width: 1280, height: 760 },
+      screen: { width: 1280, height: 800 },
+      locale: 'ru-RU',
+      timezoneId: process.env.TZ || 'Asia/Almaty',
+      ignoreHTTPSErrors: true,
+    })
+  );
   return ctx;
 }
 

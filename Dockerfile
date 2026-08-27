@@ -1,6 +1,10 @@
-FROM mcr.microsoft.com/playwright:v1.49.0-noble
+FROM mcr.microsoft.com/playwright:v1.62.1-noble
 
-RUN apt-get update && apt-get install -y --no-install-recommends xvfb x11vnc novnc websockify \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      xvfb x11vnc novnc websockify \
+      fonts-inter fonts-noto-color-emoji fonts-noto-core fonts-dejavu-core \
+      libnss3-tools \
+    && fc-cache -f \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -11,7 +15,9 @@ RUN npm ci --include=dev || npm install --include=dev
 COPY tsconfig.json ./
 COPY src ./src
 COPY public ./public
-RUN npm run build && npm prune --omit=dev
+RUN npm run build
+RUN npx playwright install chrome || echo "chrome channel unavailable, using bundled chromium"
+RUN npm prune --omit=dev
 
 ENV NODE_ENV=production \
     NODE_PATH=/app/node_modules \

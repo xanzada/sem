@@ -170,6 +170,14 @@ async function loadSettings(force) {
   }
   markProvider(s.aiBaseUrl || '');
 
+  const loop = $('#loopOn');
+  if (loop) {
+    const on = Number(s.aiIntervalMin) > 0;
+    if (loop !== document.activeElement) loop.checked = on;
+    const lf = $('#loopFields');
+    if (lf) lf.style.display = on ? '' : 'none';
+  }
+
 }
 
 let vncLoaded = false;
@@ -239,6 +247,20 @@ $$('#provSeg .seg-btn').forEach((btn) => {
   });
 });
 
+const loopChk = $('#loopOn');
+if (loopChk) {
+  loopChk.addEventListener('change', () => {
+    const lf = $('#loopFields');
+    if (lf) lf.style.display = loopChk.checked ? '' : 'none';
+    const iv = document.querySelector('input[name=aiIntervalMin]');
+    if (iv) {
+      if (loopChk.checked && Number(iv.value) <= 0) iv.value = '5';
+      if (!loopChk.checked) iv.value = '0';
+      iv.dataset.dirty = '1';
+    }
+  });
+}
+
 /* ---------------- control ---------------- */
 async function control(cmd) {
   try {
@@ -266,8 +288,15 @@ async function refreshAgent() {
   try { renderAgent(await api('/api/ai/state')); } catch { /* ignore */ }
 }
 async function runTask(inputSel, btnSel) {
-  const task = $(inputSel).value.trim();
-  if (!task) { toast('Напишите команду'); return; }
+  const field = document.querySelector(inputSel);
+  const task = (field?.value || '').trim();
+  if (!task) { toast('Напишите задачу'); return; }
+  try {
+    await api('/api/settings', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ aiInstruction: task }),
+    });
+  } catch { /* сохраним при следующем Save */ }
   const btn = $(btnSel);
   const old = btn.textContent;
   btn.disabled = true; btn.textContent = '⏳ Агент работает…';
@@ -285,7 +314,10 @@ async function runTask(inputSel, btnSel) {
 
 /* ---------------- help ---------------- */
 const HELP = {
-  ai: ['🤖 Команда агенту', `Агент видит экран браузера и сам нажимает нужные кнопки — как человек.<br><br>
+  ai: ['🤖 Команда агенту', `Одна задача — агент делает её и повторяет по расписанию.<br><br>
+<b>▶ Выполнить сейчас</b> — сделать один раз прямо сейчас.<br>
+<b>Повторять по расписанию</b> — включите и укажите интервал (например 5 минут). Затем ▶ Старт сверху — агент будет работать сам круглосуточно.<br>
+<b>Лимит шагов</b> — сколько действий максимум за один проход (защита от лишних расходов).<br><br>
 Пишите обычными словами:<br>
 • <i>«Войди на сайт: логин admin, пароль 12345»</i><br>
 • <i>«Открой список заявок и прими первую новую»</i><br>
@@ -304,12 +336,8 @@ const HELP = {
 • Ключ: ваш <code>sk-…</code><br><br>
 Модель нужно выбирать <b>с поддержкой картинок</b> (vision) — агент работает по скриншоту.
 Название пишите точно как у провайдера. Ключ хранится только на вашем сервере.`],
-  loop: ['♻️ Постоянная работа', `Чтобы агент работал сам, без ваших команд:<br><br>
-1. Напишите инструкцию — что проверять и что делать<br>
-2. Режим = <b>🤖 ИИ-агент</b><br>
-3. Включите «Запускать автоматически» — после перезапуска сервера агент поднимется сам<br>
-4. Нажмите ▶ Старт на главной<br><br>
-Агент будет повторять инструкцию по кругу с паузами.`],
+  loop: ['♻️ Автозапуск', `Если включено — после перезапуска сервера агент поднимется сам и продолжит работать по вашей задаче.<br><br>
+«Другие режимы» нужны редко: обычный режим — <b>🤖 ИИ-агент</b>.`],
   site: ['🌐 Сайт и вход', `Адрес сайта, где работает агент, и данные для входа.<br><br>
 Если сессия истечёт — бот войдёт сам по этим данным. Если понадобится код из SMS, вы получите уведомление, введёте код во вкладке <b>Экран</b>, и агент продолжит.<br><br>
 Пароль хранится только на вашем сервере.`],
@@ -371,7 +399,7 @@ $('#btnStop').addEventListener('click', () => control('stop'));
 $('#btnPause').addEventListener('click', () => control(snap && snap.paused ? 'resume' : 'pause'));
 $('#btnLogout').addEventListener('click', () => { location.href = '/logout'; });
 
-$('#btnAiRun').addEventListener('click', () => runTask('#aiTask', '#btnAiRun'));
+$('#btnAiRun').addEventListener('click', () => runTask('textarea[name=aiInstruction]', '#btnAiRun'));
 
 $('#btnAiTest').addEventListener('click', async () => {
   const out = $('#aiTestOut');

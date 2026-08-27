@@ -11,6 +11,8 @@ export interface SemSettings {
   aiModel: string;
   aiBaseUrl: string;
   aiInstruction: string;
+  aiIntervalMin: number;
+  aiMaxSteps: number;
   selectorsJson: string;
   stepsJson: string;
   speed: number;
@@ -37,6 +39,8 @@ export const DEFAULT_SETTINGS: SemSettings = {
   aiModel: 'gemini-2.0-flash',
   aiBaseUrl: '',
   aiInstruction: '',
+  aiIntervalMin: 5,
+  aiMaxSteps: 20,
   selectorsJson: '',
   stepsJson: '',
   speed: 1,
@@ -65,6 +69,8 @@ const ENV_KEYS: Partial<Record<keyof SemSettings, string>> = {
   aiModel: 'AI_MODEL',
   aiBaseUrl: 'AI_BASE_URL',
   aiInstruction: 'AI_INSTRUCTION',
+  aiIntervalMin: 'AI_INTERVAL_MIN',
+  aiMaxSteps: 'AI_MAX_STEPS',
   selectorsJson: 'SELECTORS_JSON',
   stepsJson: 'STEPS_JSON',
   speed: 'SPEED',

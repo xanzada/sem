@@ -141,8 +141,8 @@ export class Engine {
         return;
       }
       if (!String(s.aiInstruction || '').trim()) {
-        this.setState(WState.ERROR, 'Задайте постоянную инструкцию для ИИ-агента');
-        log('error', 'CONTROL', 'Запуск невозможен: пустая инструкция ИИ-агента');
+        this.setState(WState.ERROR, 'Напишите задачу в «Команда агенту» и сохраните');
+        log('error', 'CONTROL', 'Запуск невозможен: задача агента не задана');
         return;
       }
     } else if (!simulation && !s.siteUrl) {
@@ -294,6 +294,7 @@ export class Engine {
       async shot(name: string) {
         return screenshot(name);
       },
+      alive: () => self.running && !self.stopRequested && !self.paused,
     };
   }
 

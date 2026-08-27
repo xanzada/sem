@@ -53,12 +53,26 @@
       <div class="card kpi"><div class="kpi-num" id="kUp">—</div><div class="kpi-cap">В работе</div></div>
     </div>
 
-    <div class="card accent">
+    <form class="card accent" data-save id="taskForm">
       <div class="card-head"><h2>🤖 Команда агенту</h2><span class="qmark" data-help="ai">?</span></div>
-      <textarea id="aiTask" class="prompt xl" rows="7" placeholder="Опишите задачу подробно, например:&#10;1. Открой список заявок&#10;2. Найди новые со статусом «В обработке»&#10;3. Открой первую, нажми «Принять»&#10;4. Если появится окно подтверждения — нажми «Да»&#10;5. Вернись к списку"></textarea>
-      <button class="btn primary block" id="btnAiRun">Выполнить команду</button>
+      <p class="hint">Одна задача — агент выполняет её сейчас и потом повторяет по расписанию.</p>
+      <textarea name="aiInstruction" class="prompt xl" rows="7" placeholder="Опишите задачу подробно, например:&#10;1. Открой список заявок&#10;2. Найди новые со статусом «В обработке»&#10;3. Открой первую, нажми «Принять»&#10;4. Если появится окно подтверждения — нажми «Да»&#10;5. Вернись к списку"></textarea>
+
+      <div class="switch-row">
+        <span class="switch-label">Повторять по расписанию (робот работает сам)</span>
+        <label class="switch"><input type="checkbox" id="loopOn"><span class="slider"></span></label>
+      </div>
+      <div class="field-2" id="loopFields">
+        <div class="field"><label>Повтор каждые, мин</label><input type="number" name="aiIntervalMin" min="0" max="720" step="1"></div>
+        <div class="field"><label>Лимит шагов за проход</label><input type="number" name="aiMaxSteps" min="3" max="60" step="1"></div>
+      </div>
+
+      <div class="btn-col">
+        <button type="button" class="btn primary block" id="btnAiRun">▶ Выполнить сейчас</button>
+        <button type="submit" class="btn ghost block">💾 Сохранить задачу</button>
+      </div>
       <div id="aiLive" class="ai-live"></div>
-    </div>
+    </form>
 
   </section>
 
@@ -136,25 +150,24 @@
       <div id="aiTestOut" class="hint mt"></div>
     </form>
 
-    <!-- 3. Постоянная работа -->
+    <!-- 3. Автозапуск -->
     <form class="card" data-save>
-      <div class="card-head"><h2>♻️ Постоянная работа</h2><span class="qmark" data-help="loop">?</span></div>
-      <div class="field">
-        <label>Инструкция, которую агент повторяет</label>
-        <textarea name="aiInstruction" class="prompt tall" rows="4" placeholder="Проверяй список заявок. Если есть новая со статусом «В обработке» — открой и нажми «Принять», затем вернись к списку."></textarea>
-      </div>
-      <div class="field">
-        <label>Режим работы</label>
-        <select name="mode">
-          <option value="ai">🤖 ИИ-агент — по инструкции</option>
-          <option value="live">Боевой — по сохранённым шагам</option>
-          <option value="simulation">Демо — учебный сайт</option>
-        </select>
-      </div>
-      <div class="switch-row">
-        <span class="switch-label">Запускать автоматически при старте сервера</span>
+      <div class="card-head"><h2>♻️ Автозапуск</h2><span class="qmark" data-help="loop">?</span></div>
+      <div class="switch-row" style="border-top:none;padding-top:0">
+        <span class="switch-label">Запускать агента при старте сервера</span>
         <label class="switch"><input type="checkbox" name="autostart"><span class="slider"></span></label>
       </div>
+      <details class="adv">
+        <summary>Другие режимы работы</summary>
+        <div class="field" style="margin-top:10px">
+          <label>Режим</label>
+          <select name="mode">
+            <option value="ai">🤖 ИИ-агент (обычный режим)</option>
+            <option value="live">Боевой — по сохранённым шагам</option>
+            <option value="simulation">Демо — учебный сайт</option>
+          </select>
+        </div>
+      </details>
       <button type="submit" class="btn primary block">Сохранить</button>
     </form>
 

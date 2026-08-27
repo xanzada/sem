@@ -519,30 +519,45 @@ export function parseSteps(): Step[] {
   return [];
 }
 
-/** Постоянный ИИ-режим: агент сам смотрит на экран и делает работу по инструкции. */
+/** Постоянный ИИ-режим: агент повторяет задачу по расписанию. */
 export class AiLoopDriver implements WorkflowDriver {
   name = 'ai';
 
   async cycle(ctx: DriverCtx): Promise<void> {
     const s = getAllSettings();
-    const instruction = String(s.aiInstruction || '').trim();
-    if (!instruction) throw new MissingSelectorsError();
-
-    ctx.setStep('ИИ-агент смотрит на экран…');
-    const { runAiTask } = await import('./agent.js');
-    const r = await runAiTask(instruction, 20);
-
-    if (!r.ok) {
-      ctx.log('warn', 'WORKFLOW', `ИИ-агент: ${r.reason ?? 'ошибка'}`);
-      await ctx.delay(20);
+    const task = String(s.aiInstruction || '').trim();
+    if (!task) {
+      ctx.log('warn', 'CONTROL', 'Задача не задана — напишите её в «Команда агенту» и сохраните');
+      ctx.setStep('Нет задачи');
+      await sleep(30000);
       return;
     }
-    if (r.done) {
-      ctx.log('success', 'WORKFLOW', `ИИ-агент завершил проход (${r.steps} шаг.)`);
+
+    const { runAiTask } = await import('./agent.js');
+    const maxSteps = Math.max(3, Math.min(60, Number(s.aiMaxSteps) || 20));
+    ctx.setStep('Агент смотрит на экран…');
+    const r = await runAiTask(task, maxSteps);
+
+    if (!r.ok) {
+      ctx.log('warn', 'WORKFLOW', `Агент: ${r.reason ?? 'ошибка'}`);
+    } else if (r.done) {
+      ctx.log('success', 'WORKFLOW', `Проход завершён за ${r.steps} шаг(ов): ${r.reason ?? ''}`);
     } else {
-      ctx.log('info', 'WORKFLOW', `ИИ-агент: ${r.reason ?? 'нет новых заявок'}`);
+      ctx.log('info', 'WORKFLOW', `Проход окончен: ${r.reason ?? 'нет изменений'}`);
     }
-    ctx.setStep('Пауза между проходами');
-    await ctx.delay(8);
+
+    const min = Math.max(0, Math.min(720, Number(s.aiIntervalMin) ?? 5));
+    if (min <= 0) {
+      ctx.setStep('Следующий проход сразу');
+      await sleep(3000);
+      return;
+    }
+    const until = new Date(Date.now() + min * 60000);
+    ctx.setStep(`Следующий проход в ${until.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`);
+    const deadline = Date.now() + min * 60000;
+    while (Date.now() < deadline) {
+      await sleep(2000);
+      if (!ctx.alive?.()) return;
+    }
   }
 }
