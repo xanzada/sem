@@ -286,10 +286,15 @@ export async function runAgentSession(opts: {
   const maxSteps = opts.maxSteps ?? 25;
   const history: string[] = [];
   let lastWhy = '';
+  /* Счётчик бесплодных повторов: модель любит долбить одну и ту же кнопку,
+   * если страница внешне не изменилась. */
+  let repeats = 0;
+  let prevSig = '';
 
   for (let step = 1; step <= maxSteps; step++) {
     const shot = await page.screenshot({ type: 'jpeg', quality: 55, timeout: 20000 });
     const vp = page.viewportSize() ?? { width: 1280, height: 800 };
+    const urlBefore = page.url();
     const a = await decide({
       key: opts.key,
       model: opts.model,
@@ -299,7 +304,7 @@ export async function runAgentSession(opts: {
       shotJpeg: shot,
       width: vp.width,
       height: vp.height,
-      url: page.url(),
+      url: urlBefore,
     });
     lastWhy = a.why ?? a.act;
     history.push(`${a.act}(${lastWhy.slice(0, 60)})`);
@@ -309,6 +314,10 @@ export async function runAgentSession(opts: {
       case 'click':
         if (!a.x || !a.y) throw new Error('Модель не дала координаты клика');
         await page.mouse.click(a.x, a.y);
+        /* Клик может открыть новую страницу — ждём и её, и просто паузу. */
+        await page
+          .waitForLoadState('domcontentloaded', { timeout: 8000 })
+          .catch(() => {});
         await page.waitForTimeout(950);
         break;
       case 'type':
@@ -336,6 +345,25 @@ export async function runAgentSession(opts: {
       case 'fail':
         return { steps: step, done: false, lastWhy };
     }
+
+    /* Одно и то же действие на том же адресе — тупик, а не прогресс. */
+    const sig = `${a.act}:${a.x ?? ''},${a.y ?? ''}:${a.text ?? ''}:${urlBefore}`;
+    if (sig === prevSig && page.url() === urlBefore) {
+      repeats += 1;
+      history.push(
+        `ВНИМАНИЕ: это действие уже повторялось ${repeats} раз(а) и адрес страницы не изменился — оно НЕ работает. Выбери другое: прокрути страницу, кликни в другом месте, используй goto или верни fail.`
+      );
+      if (repeats >= 3) {
+        return {
+          steps: step,
+          done: false,
+          lastWhy: `Действие «${a.act}» повторилось ${repeats} раза без изменений на странице`,
+        };
+      }
+    } else {
+      repeats = 0;
+    }
+    prevSig = sig;
   }
   return { steps: maxSteps, done: false, lastWhy: 'Достигнут лимит шагов' };
 }
