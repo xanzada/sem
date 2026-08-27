@@ -10,13 +10,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm ci --include=dev || npm install --include=dev
+# Пакеты ставим без install-скриптов: better-sqlite3 13 приносит готовые
+# N-API prebuilds, а браузеры уже лежат в /ms-playwright базового образа,
+# поэтому компилятор (make/g++) в образе не нужен.
+RUN npm ci --include=dev --ignore-scripts || npm install --include=dev --ignore-scripts
 
 COPY tsconfig.json ./
 COPY src ./src
 COPY public ./public
 RUN npm run build
-RUN npm prune --omit=dev
+RUN npm prune --omit=dev --ignore-scripts
 
 ENV NODE_ENV=production \
     NODE_PATH=/app/node_modules \
