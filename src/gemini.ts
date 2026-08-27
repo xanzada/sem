@@ -159,7 +159,36 @@ function isTransient(e: unknown): boolean {
   );
 }
 
+/** Дневная квота модели исчерпана — ждать бессмысленно, нужна другая модель. */
+function isQuotaExhausted(e: unknown): boolean {
+  const s = String(e);
+  return /API 429/.test(s) && /exceeded your current quota|RESOURCE_EXHAUSTED|PerDay/i.test(s);
+}
+
+/** Модель отсутствует или закрыта для новых проектов. */
+function isModelUnavailable(e: unknown): boolean {
+  const s = String(e);
+  return /API 404/.test(s) || /no longer available|is not found/i.test(s);
+}
+
 const RETRY_DELAYS_MS = [4000, 12000, 30000];
+
+/** Резервные модели на случай исчерпанной квоты — из env или разумный список. */
+const FALLBACK_MODELS = (process.env.AI_FALLBACK_MODELS ?? 'gemini-3.5-flash,gemini-3.1-flash-lite,gemini-3-flash-preview')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+/** Модель → до какого времени её не трогаем (исчерпана квота / нет доступа). */
+const modelCooldown = new Map<string, number>();
+const COOLDOWN_MS = 30 * 60 * 1000;
+
+function usableModels(primary: string): string[] {
+  const now = Date.now();
+  const all = [primary, ...FALLBACK_MODELS.filter((m) => m !== primary)];
+  const free = all.filter((m) => (modelCooldown.get(m) ?? 0) <= now);
+  return free.length ? free : all;
+}
 
 export async function decide(opts: {
   key: string;
@@ -172,14 +201,22 @@ export async function decide(opts: {
   height: number;
   url: string;
 }): Promise<AiAction> {
+  const models = isGeminiApi(opts.baseUrl) ? usableModels(opts.model) : [opts.model];
   let last: unknown;
-  for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
-    try {
-      return await decideOnce(opts);
-    } catch (e) {
-      last = e;
-      if (!isTransient(e) || attempt === RETRY_DELAYS_MS.length) break;
-      await new Promise((res) => setTimeout(res, RETRY_DELAYS_MS[attempt]));
+
+  for (const model of models) {
+    for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+      try {
+        return await decideOnce({ ...opts, model });
+      } catch (e) {
+        last = e;
+        if (isQuotaExhausted(e) || isModelUnavailable(e)) {
+          modelCooldown.set(model, Date.now() + COOLDOWN_MS);
+          break; /* следующая модель */
+        }
+        if (!isTransient(e) || attempt === RETRY_DELAYS_MS.length) return Promise.reject(e);
+        await new Promise((res) => setTimeout(res, RETRY_DELAYS_MS[attempt]));
+      }
     }
   }
   throw last instanceof Error ? last : new Error(String(last));
