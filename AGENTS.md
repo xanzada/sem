@@ -14,6 +14,9 @@ Frontend: vanilla JS/CSS (public/), Chart.js CDN.
 
 ## Ережелер
 - Пароль/telegram token чатқа, git-ке, log-қа кірмейді. UI `__SAVED__` placeholder қолданады.
+- **Агент әрекеті `ref` арқылы**: `src/dom.ts` беттегі интерактив элементтерді жинап нөмірлейді (жасырын checkbox/radio, `cursor:pointer` карточкалар да кіреді), модель `{"act":"click","ref":N}` қайтарады, клик Playwright locator арқылы жасалады. Таза координат бойынша басу — viewport ішінде ғана және тек ref болмаса. Себебі: сайттың `Далее` батырмасы y=864, ал viewport 760 — координат бойынша клик ешқайда түспейді.
+- **Тоқтату**: `POST /api/ai/stop` → `stopAiTask()` флагы; цикл әр қадам мен әр `nap()` ішінде тексереді. `engine.stop()/pause()` да осыны шақырады. Панельдегі СТОП батырмасы ешқашан `disabled` болмайды.
+- **Модельсіз құралдар**: `GET /api/tools/inspect` (бот не көріп тұр) және `POST /api/tools/act` (`{act,ref,text,...}`) — API квотасын жұмсамай тексеруге арналған. Жаңа сайтты зерттегенде бірінші осыны қолдану керек.
 - **CSS**: `public/css/style.css` — жалғыз spacing шкаласы `--s1..--s4` және жалғыз `.card > * + *` ережесі. Файл соңына қосымша блок жазуға болмайды (бұрын солай істелген еді, `--acc` айнымалысы жоқ болғандықтан ережелер үнсіз бұзылған). Түстер: `--acc`, `--acc-soft`, `--acc-line`, `--acc-glow`.
 - **Frontend жылдамдығы**: index.html-де сыртқы blocking `<link>`/`<script>` жоқ. Chart.js тек «Статистика» ашылғанда `loadChartLib()` арқылы жүктеледі; шрифт — жүйелік stack.
 - Security challenge ешқашан обход жасалмайды: тек WAIT → DETECT → REVALIDATE → RESUME.
