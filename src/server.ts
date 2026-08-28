@@ -385,7 +385,9 @@ export async function buildServer(engine: Engine): Promise<void> {
     };
   });
 
-  /* Проверка правила «вживую»: ищем текст сейчас, без клика. */
+  /* Проверка правила «вживую»: ищем текст сейчас, без клика.
+   * Логика совпадения та же, что у наблюдателя (границы слова), иначе
+   * диагностика показывала бы не то, что реально сработает. */
   app.post('/api/tools/probe', async (req) => {
     const b = (req.body ?? {}) as { text?: string; scope?: string };
     const needle = String(b.text ?? '').trim();
@@ -395,21 +397,41 @@ export async function buildServer(engine: Engine): Promise<void> {
       .evaluate(
         `(() => {
           const scope = ${JSON.stringify(b.scope ?? '')};
-          let root = document.body;
-          if (scope) { try { root = document.querySelector(scope) || document.body; } catch {} }
+          let roots = [document.body];
+          if (scope) {
+            try {
+              const l = [...document.querySelectorAll(scope)];
+              if (l.length) roots = l;
+            } catch {}
+          }
           const needle = ${JSON.stringify(needle.toLowerCase())};
-          const out = [];
-          const w = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
-          let n = w.currentNode;
-          while (n && out.length < 10) {
-            if (n.childElementCount <= 2) {
-              const t = (n.textContent || '').replace(/\\s+/g, ' ').trim();
-              if (t && t.toLowerCase().indexOf(needle) >= 0) {
-                const r = n.getBoundingClientRect();
-                if (r.width > 0 && r.height > 0) out.push({ text: t.slice(0, 90), y: Math.round(r.top) });
-              }
+          const LETTER = /[\\p{L}\\p{N}]/u;
+          const hasNeedle = (text) => {
+            let from = 0;
+            for (;;) {
+              const i = text.indexOf(needle, from);
+              if (i < 0) return false;
+              const before = i === 0 ? '' : text[i - 1];
+              const after = text[i + needle.length] || '';
+              if ((!before || !LETTER.test(before)) && (!after || !LETTER.test(after))) return true;
+              from = i + 1;
             }
-            n = w.nextNode();
+          };
+          const out = [];
+          for (const root of roots) {
+            const w = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+            let n = w.currentNode;
+            while (n && out.length < 10) {
+              const tag = n.tagName;
+              if (tag !== 'SCRIPT' && tag !== 'STYLE' && tag !== 'NOSCRIPT' && n.childElementCount <= 2) {
+                const t = (n.textContent || '').replace(/\\s+/g, ' ').trim();
+                if (t && hasNeedle(t.toLowerCase())) {
+                  const r = n.getBoundingClientRect();
+                  if (r.width > 0 && r.height > 0) out.push({ text: t.slice(0, 90), y: Math.round(r.top) });
+                }
+              }
+              n = w.nextNode();
+            }
           }
           return out;
         })()`
@@ -419,9 +441,9 @@ export async function buildServer(engine: Engine): Promise<void> {
   });
 
   /* Живая проверка робота: на страницу добавляется временный блок с текстом
-   * из правила и кнопкой. Наблюдатель должен поймать его и нажать — так видно,
-   * что механизм работает, ещё до появления настоящего слота. Блок удаляется
-   * сам и не отправляет никаких запросов на сайт. */
+   * из правила, кнопкой и кнопками подтверждения. Наблюдатель должен поймать
+   * его и пройти всю цепочку — так видно, что механизм работает, ещё до
+   * появления настоящего слота. Блок удаляется сам и ничего не отправляет. */
   app.post('/api/tools/simulate', async () => {
     const r = activeRule();
     if (!r) return { ok: false, reason: 'Сначала обучите робота' };
@@ -430,6 +452,11 @@ export async function buildServer(engine: Engine): Promise<void> {
     }
     const page = await getPage();
     const clickLabel = r.clickText || 'Записаться';
+    /* Растау қадамдарын да қоямыз: әйтпесе тест «расталмады» деп бітеді. */
+    const confirmLabels = r.confirm
+      .map((s) => String(s.text ?? '').trim())
+      .filter(Boolean)
+      .slice(0, 4);
     try {
       await page.evaluate(
         `(() => {
@@ -438,26 +465,46 @@ export async function buildServer(engine: Engine): Promise<void> {
           box.setAttribute('data-sem-sim', '1');
           box.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:2147483647;'
             + 'background:#0b1017;color:#e8eef6;border:2px solid #22c55e;border-radius:10px;'
-            + 'padding:10px 12px;font:13px system-ui';
+            + 'padding:10px 12px;font:13px system-ui;max-width:60vw';
+          const row = document.createElement('div');
           const t = document.createElement('span');
           t.textContent = ${JSON.stringify(r.watchText)};
           const b = document.createElement('button');
           b.type = 'button';
           b.textContent = ${JSON.stringify(clickLabel)};
           b.style.cssText = 'margin-left:10px;padding:4px 10px;cursor:pointer';
+          row.appendChild(t);
+          row.appendChild(b);
+          box.appendChild(row);
+
+          const labels = ${JSON.stringify(confirmLabels)};
+          /* Растау түймелері клик болғаннан кейін ғана пайда болады — нақты
+           * модаль сияқты, сондықтан тізбектің шынымен өтетіні тексеріледі. */
           b.addEventListener('click', () => {
-            b.textContent = 'нажато роботом ✓';
+            b.textContent = 'нажато ✓';
             b.disabled = true;
+            const modal = document.createElement('div');
+            modal.setAttribute('data-sem-sim', '1');
+            modal.style.cssText = box.style.cssText.replace('bottom:12px', 'bottom:90px');
+            labels.forEach((lab) => {
+              const cb = document.createElement('button');
+              cb.type = 'button';
+              cb.textContent = lab;
+              cb.style.cssText = 'margin:0 6px;padding:4px 10px;cursor:pointer';
+              cb.addEventListener('click', () => { cb.textContent = lab + ' ✓'; cb.disabled = true; });
+              modal.appendChild(cb);
+            });
+            if (labels.length) document.body.appendChild(modal);
+            setTimeout(() => modal.remove(), 20000);
           });
-          box.appendChild(t);
-          box.appendChild(b);
+
           document.body.appendChild(box);
           setTimeout(() => box.remove(), 20000);
           return true;
         })()`
       );
-      log('info', 'CONTROL', `🧪 Проверка вживую: на страницу добавлен тестовый блок «${r.watchText}»`);
-      return { ok: true, watchText: r.watchText, clickText: clickLabel };
+      log('info', 'CONTROL', `🧪 Проверка вживую: добавлен блок «${r.watchText}» + ${confirmLabels.length} шаг(ов) подтверждения`);
+      return { ok: true, watchText: r.watchText, clickText: clickLabel, confirm: confirmLabels };
     } catch (e) {
       return { ok: false, reason: String(e).slice(0, 160) };
     }

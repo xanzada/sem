@@ -80,6 +80,25 @@ function watcherSource(): string {
   const low = (s) => norm(s).toLowerCase();
   const needle = low(cfg.watchText);
 
+  /* Ішкі жол бойынша іздеу тым бос: «Свободно» деген шарт «Первое свободное
+   * время» дегенге де сәйкес келіп, робот бірден басып жіберді (тірі тестте
+   * бет /ru/start-қа кетіп қалды). Сондықтан сөз шекарасын тексереміз. */
+  const LETTER = /[\\p{L}\\p{N}]/u;
+  const hasNeedle = (text) => {
+    if (!needle) return false;
+    let from = 0;
+    for (;;) {
+      const i = text.indexOf(needle, from);
+      if (i < 0) return false;
+      const before = i === 0 ? '' : text[i - 1];
+      const after = text[i + needle.length] ?? '';
+      const okBefore = !before || !LETTER.test(before);
+      const okAfter = !after || !LETTER.test(after);
+      if (okBefore && okAfter) return true;
+      from = i + 1;
+    }
+  };
+
   const visible = (el) => {
     if (!el || !el.getBoundingClientRect) return false;
     const r = el.getBoundingClientRect();
@@ -107,9 +126,16 @@ function watcherSource(): string {
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
       let node = walker.currentNode;
       while (node) {
+        /* SCRIPT/STYLE ішіндегі код мәтін ретінде сәйкес келіп қалады —
+         * бір рет осылай onclick-тегі JS «табылған» болып шықты. */
+        const tag = node.tagName;
+        if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT' || tag === 'TEMPLATE') {
+          node = walker.nextSibling() || walker.nextNode();
+          continue;
+        }
         if (node.childElementCount <= 2) {
           const t = low(node.textContent);
-          if (t && t.indexOf(needle) >= 0 && visible(node) && !state.done.has(node)) {
+          if (t && hasNeedle(t) && visible(node) && !state.done.has(node)) {
             return node;
           }
         }
@@ -217,6 +243,11 @@ function watcherSource(): string {
         return;
       }
 
+      /* Түйменің мәтінін клик жасамай ТҰРЫП оқимыз: сайт оны басқаннан кейін
+       * жиі өзгертеді («Записаться» → «Обработка…»), сонда журналда мағынасыз
+       * мәтін қалады. */
+      const targetLabel = norm(target.textContent || target.value).slice(0, 60);
+
       /* Клик — сол ілезде, ешқандай await-сыз. */
       target.click();
       const clickedAt = Date.now();
@@ -232,7 +263,7 @@ function watcherSource(): string {
       const base = {
         ts: t0,
         found: norm(match.textContent).slice(0, 80),
-        clicked: norm(target.textContent || target.value).slice(0, 60),
+        clicked: targetLabel,
         reactionMs: clickedAt - t0,
       };
 
