@@ -447,10 +447,6 @@ export async function buildServer(engine: Engine): Promise<void> {
 
   app.post('/api/ai/run', async (req) => {
     const { task, maxSteps } = ((req.body ?? {}) as { task?: string; maxSteps?: number }) ?? {};
-    const snap = engine.snapshot();
-    if (snap.running && !snap.paused) {
-      return { ok: false, reason: 'Бот работает по расписанию — сначала ⏸ Пауза или ⏹ Стоп' };
-    }
     const { runAiTask } = await import('./agent.js');
     return runAiTask(String(task ?? ''), Math.min(40, Math.max(1, Number(maxSteps ?? 25))));
   });

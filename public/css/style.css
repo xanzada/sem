@@ -67,6 +67,7 @@ main { max-width: 640px; margin: 0 auto; padding: 16px 16px calc(88px + env(safe
 .page.active { display: block; animation: fadeIn .2s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
+/* ---------- cards ---------- */
 .card {
   background: linear-gradient(180deg, var(--surface), var(--surface-alt));
   border: 1px solid var(--border);
@@ -312,10 +313,7 @@ details.adv summary {
   cursor: pointer; font-size: 12.5px; color: #9ec2ff; padding: 9px 0;
   list-style: none; user-select: none;
 }
-details.adv summary::-webkit-details-marker { display: none; }
-details.adv summary::before { content: "▸ "; }
-details.adv[open] summary::before { content: "▾ "; }
-details.adv > * + * { margin-top: 12px; }
+.btn.primary:hover:not(:disabled) { box-shadow: 0 6px 20px var(--acc-glow), inset 0 1px 0 rgba(255,255,255,0.3); transform: translateY(-1px); }
 
 /* ----- responsive ----- */
 @media (max-width: 380px) {
@@ -324,10 +322,27 @@ details.adv > * + * { margin-top: 12px; }
   .tab span { font-size: 9px; }
 }
 @media (min-width: 680px) {
-  main { max-width: 720px; padding-top: 20px; }
   .kpi-grid { grid-template-columns: repeat(4, 1fr); }
   .btn-col { flex-direction: row; }
   .modal { align-items: center; padding: 20px; }
-  .modal-card { border-radius: 18px; }
-  .feed { max-height: 40vh; }
+  .modal-card { border-radius: 20px; }
 }
+
+@media (max-width: 380px) {
+  .kpi-num { font-size: 24px; }
+  .btn { padding: 12px 14px; font-size: 13px; }
+  .kpi-lbl { font-size: 9.5px; }
+}
+
+
+.chart-box { height: 210px; margin-top: 16px; }
+.field-2 > .field { flex: 1; margin-top: 0; min-width: 0; }
+
+
+.brand-name { font-size: 18px; font-weight: 800; letter-spacing: 2px; text-shadow: 0 0 12px var(--acc); color: #fff; }
+.qmark { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #a5b4fc; font-size: 12px; font-weight: 700; cursor: pointer; box-shadow: 0 0 8px rgba(99,102,241,0.3); transition: 0.2s; flex-shrink: 0; margin-left: 8px; }
+.qmark:hover { background: var(--acc); color: #fff; }
+.btn.primary.active-glow { box-shadow: 0 0 20px var(--acc); opacity: 1 !important; filter: none !important; }
+.btn.danger.active-glow { box-shadow: 0 0 20px var(--bad); opacity: 1 !important; filter: none !important; }
+.btn-col { display: flex; flex-direction: column; gap: 16px; margin-top: 24px; }
+.btn-col > div { display: flex; gap: 12px !important; }

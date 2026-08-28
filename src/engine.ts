@@ -44,6 +44,7 @@ export class Engine {
   private stopRequested = false;
   private driver: WorkflowDriver | null = null;
   private lastActivity = Date.now();
+  private lastKeepalive = Date.now();
   private demoSeqRestored = 0;
   private sessionBackupTimer: NodeJS.Timeout | null = null;
   private authAlerted = false;
@@ -352,13 +353,14 @@ export class Engine {
           unexpectedCount = 0;
         }
 
-        this.lastActivity = Date.now();
+        if (!this.lastKeepalive) this.lastKeepalive = Date.now();
         await this.driver!.cycle(this.makeCtx(page ?? ({} as Page)));
 
-        const idleMs = Date.now() - this.lastActivity;
-        const keepaliveSec = Number(getSetting('keepaliveSec')) || 180;
+        const idleMs = Date.now() - this.lastKeepalive;
+        const keepaliveSec = Number(getSetting('keepaliveSec')) || 60; // Default to 60s for faster anti-AFK
         if (!simulation && page && idleMs > keepaliveSec * 1000) {
           await this.keepalive(page);
+          this.lastKeepalive = Date.now();
         }
       } catch (e) {
         if (e instanceof SimulatedIncident) {

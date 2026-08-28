@@ -2,7 +2,8 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <meta name="theme-color" content="#0b0f14">
 <title>SEM — оператор заявок</title>
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
@@ -39,11 +40,6 @@
         </div>
       </div>
 
-      <div class="ctrl-row">
-        <button class="ctrl ctrl-go" id="btnStart"><b>▶</b><span>Старт</span></button>
-        <button class="ctrl" id="btnPause"><b>⏸</b><span>Пауза</span></button>
-        <button class="ctrl ctrl-stop" id="btnStop"><b>⏹</b><span>Стоп</span></button>
-      </div>
     </div>
 
     <div class="kpi-grid">
@@ -68,7 +64,10 @@
       </div>
 
       <div class="btn-col">
-        <button type="button" class="btn primary block" id="btnAiRun">▶ Выполнить сейчас</button>
+        <div style="display:flex; gap: 8px;">
+          <button type="button" class="btn primary block" id="btnAiRun" style="flex:1;">▶ СТАРТ</button>
+          <button type="button" class="btn danger block" id="btnAiStop" style="flex:1;">⏹ СТОП</button>
+        </div>
         <button type="submit" class="btn ghost block">💾 Сохранить задачу</button>
       </div>
       <div id="aiLive" class="ai-live"></div>

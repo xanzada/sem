@@ -67,10 +67,16 @@ function renderStatus() {
   setText('#kToday', snap.processedToday);
   setText('#kUp', live ? dur(snap.uptimeSec) : '—');
 
-  $('#btnStart').disabled = snap.running && !snap.paused;
-  $('#btnPause').disabled = !snap.running;
-  $('#btnPause').querySelector('span').textContent = snap.paused ? 'Продолж.' : 'Пауза';
-  $('#btnPause').querySelector('b').textContent = snap.paused ? '▶' : '⏸';
+  if ($('#btnAiRun')) {
+    const r = snap.running;
+    $('#btnAiRun').disabled = r;
+    $('#btnAiRun').style.opacity = r ? '0.3' : '1';
+    $('#btnAiRun').classList.toggle('active-glow', !r);
+    
+    $('#btnAiStop').disabled = !r;
+    $('#btnAiStop').style.opacity = !r ? '0.3' : '1';
+    $('#btnAiStop').classList.toggle('active-glow', r);
+  }
 
   const alert = ['AUTH_REQUIRED', 'MANUAL_REVIEW', 'ERROR'].includes(snap.state);
   $$('.tab[data-tab="vnc"]').forEach((b) => b.classList.toggle('alert', alert));
@@ -439,10 +445,8 @@ $$('.tab').forEach((b) => {
   });
 });
 
-$('#btnStart').addEventListener('click', () => control('start'));
-$('#btnStop').addEventListener('click', () => control('stop'));
-$('#btnPause').addEventListener('click', () => control(snap && snap.paused ? 'resume' : 'pause'));
-$('#btnLogout').addEventListener('click', () => { location.href = '/logout'; });
+  $('#btnAiStop').addEventListener('click', () => control('stop'));
+  $('#btnLogout').addEventListener('click', () => { location.href = '/logout'; });
 
 $('#btnAiRun').addEventListener('click', () => runTask('textarea[name=aiInstruction]', '#btnAiRun'));
 
