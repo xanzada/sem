@@ -1,11 +1,11 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<title>SEM — оператор заявок</title>
 <meta name="theme-color" content="#0b0f14">
-<title>SEM вЂ” РѕРїРµСЂР°С‚РѕСЂ Р·Р°СЏРІРѕРє</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icon.svg">
 <link rel="manifest" href="/manifest.webmanifest">
@@ -22,103 +22,104 @@
     <span class="brand-name">SEM</span>
   </div>
   <div class="topbar-right">
-    <span class="badge" id="modeBadge">вЂ”</span>
-    <button class="icon-btn" id="btnLogout" title="Р’С‹Р№С‚Рё">вЋ‹</button>
+    <span class="badge" id="modeBadge">—</span>
+    <button class="icon-btn" id="btnLogout" title="Выйти">⎋</button>
   </div>
 </header>
 
 <main>
-  <!-- ======================= РџРђРќР•Р›Р¬ ======================= -->
+  <!-- ======================= ПАНЕЛЬ ======================= -->
   <section class="page active" data-tab="panel">
 
     <div class="card status-card">
       <div class="status-top">
         <div class="orb" id="bigOrb"><span></span><i></i></div>
         <div class="status-text">
-          <div class="status-name" id="stateRu">вЂ”</div>
-          <div class="status-sub" id="stateSub">вЂ”</div>
+          <div class="status-name" id="stateRu">—</div>
+          <div class="status-sub" id="stateSub">—</div>
         </div>
       </div>
 
-
+      <div class="ctrl-row">
+        <button class="ctrl ctrl-go" id="btnStart"><b>▶</b><span>Старт</span></button>
+        <button class="ctrl" id="btnPause"><b>⏸</b><span>Пауза</span></button>
+        <button class="ctrl ctrl-stop" id="btnStop"><b>⏹</b><span>Стоп</span></button>
+      </div>
     </div>
 
     <div class="kpi-grid">
-      <div class="card kpi"><div class="kpi-num ok" id="kToday">0</div><div class="kpi-cap">Р—Р°СЏРІРѕРє СЃРµРіРѕРґРЅСЏ</div></div>
-      <div class="card kpi"><div class="kpi-num" id="kAi">0</div><div class="kpi-cap">Р—Р°РґР°С‡ РР СЃРµРіРѕРґРЅСЏ</div></div>
-      <div class="card kpi"><div class="kpi-num" id="kWeek">0</div><div class="kpi-cap">Р—Р° 7 РґРЅРµР№</div></div>
-      <div class="card kpi"><div class="kpi-num" id="kUp">вЂ”</div><div class="kpi-cap">Р’ СЂР°Р±РѕС‚Рµ</div></div>
+      <div class="card kpi"><div class="kpi-num ok" id="kToday">0</div><div class="kpi-cap">Заявок сегодня</div></div>
+      <div class="card kpi"><div class="kpi-num" id="kAi">0</div><div class="kpi-cap">Задач ИИ сегодня</div></div>
+      <div class="card kpi"><div class="kpi-num" id="kWeek">0</div><div class="kpi-cap">За 7 дней</div></div>
+      <div class="card kpi"><div class="kpi-num" id="kUp">—</div><div class="kpi-cap">В работе</div></div>
     </div>
 
     <form class="card accent" data-save id="taskForm">
-      <div class="card-head"><h2>рџ¤– РљРѕРјР°РЅРґР° Р°РіРµРЅС‚Сѓ</h2><span class="qmark" data-help="ai">?</span></div>
-      <p class="hint">РћРґРЅР° Р·Р°РґР°С‡Р° вЂ” Р°РіРµРЅС‚ РІС‹РїРѕР»РЅСЏРµС‚ РµС‘ СЃРµР№С‡Р°СЃ Рё РїРѕС‚РѕРј РїРѕРІС‚РѕСЂСЏРµС‚ РїРѕ СЂР°СЃРїРёСЃР°РЅРёСЋ.</p>
-      <textarea name="aiInstruction" class="prompt xl" rows="7" placeholder="РћРїРёС€РёС‚Рµ Р·Р°РґР°С‡Сѓ РїРѕРґСЂРѕР±РЅРѕ, РЅР°РїСЂРёРјРµСЂ:&#10;1. РћС‚РєСЂРѕР№ СЃРїРёСЃРѕРє Р·Р°СЏРІРѕРє&#10;2. РќР°Р№РґРё РЅРѕРІС‹Рµ СЃРѕ СЃС‚Р°С‚СѓСЃРѕРј В«Р’ РѕР±СЂР°Р±РѕС‚РєРµВ»&#10;3. РћС‚РєСЂРѕР№ РїРµСЂРІСѓСЋ, РЅР°Р¶РјРё В«РџСЂРёРЅСЏС‚СЊВ»&#10;4. Р•СЃР»Рё РїРѕСЏРІРёС‚СЃСЏ РѕРєРЅРѕ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ вЂ” РЅР°Р¶РјРё В«Р”Р°В»&#10;5. Р’РµСЂРЅРёСЃСЊ Рє СЃРїРёСЃРєСѓ"></textarea>
+      <div class="card-head"><h2>🤖 Команда агенту</h2><span class="qmark" data-help="ai">?</span></div>
+      <p class="hint">Одна задача — агент выполняет её сейчас и потом повторяет по расписанию.</p>
+      <textarea name="aiInstruction" class="prompt xl" rows="7" placeholder="Опишите задачу подробно, например:&#10;1. Открой список заявок&#10;2. Найди новые со статусом «В обработке»&#10;3. Открой первую, нажми «Принять»&#10;4. Если появится окно подтверждения — нажми «Да»&#10;5. Вернись к списку"></textarea>
 
       <div class="switch-row">
-        <span class="switch-label">РџРѕРІС‚РѕСЂСЏС‚СЊ РїРѕ СЂР°СЃРїРёСЃР°РЅРёСЋ (СЂРѕР±РѕС‚ СЂР°Р±РѕС‚Р°РµС‚ СЃР°Рј)</span>
+        <span class="switch-label">Повторять по расписанию (робот работает сам)</span>
         <label class="switch"><input type="checkbox" id="loopOn"><span class="slider"></span></label>
       </div>
       <div class="field-2" id="loopFields">
-        <div class="field"><label>РџРѕРІС‚РѕСЂ РєР°Р¶РґС‹Рµ, РјРёРЅ</label><input type="number" name="aiIntervalMin" min="0" max="720" step="1"></div>
-        <div class="field"><label>Р›РёРјРёС‚ С€Р°РіРѕРІ Р·Р° РїСЂРѕС…РѕРґ</label><input type="number" name="aiMaxSteps" min="3" max="60" step="1"></div>
+        <div class="field"><label>Повтор каждые, мин</label><input type="number" name="aiIntervalMin" min="0" max="720" step="1"></div>
+        <div class="field"><label>Лимит шагов за проход</label><input type="number" name="aiMaxSteps" min="3" max="60" step="1"></div>
       </div>
 
       <div class="btn-col">
-        <div style="display:flex; gap: 8px;">
-          <button type="button" class="btn primary block" id="btnAiRun" style="flex:1;">в–¶ РЎРўРђР Рў</button>
-          <button type="button" class="btn danger block" id="btnAiStop" style="flex:1;">вЏ№ РЎРўРћРџ</button>
-        </div>
-        <button type="submit" class="btn ghost block">рџ’ѕ РЎРѕС…СЂР°РЅРёС‚СЊ Р·Р°РґР°С‡Сѓ</button>
+        <button type="button" class="btn primary block" id="btnAiRun">▶ Выполнить сейчас</button>
+        <button type="submit" class="btn ghost block">💾 Сохранить задачу</button>
       </div>
       <div id="aiLive" class="ai-live"></div>
     </form>
 
   </section>
 
-  <!-- ======================= РЎРўРђРўРРЎРўРРљРђ ======================= -->
+  <!-- ======================= СТАТИСТИКА ======================= -->
   <section class="page" data-tab="analytics">
     <div class="kpi-grid">
-      <div class="card kpi"><div class="kpi-num ok" id="stToday">вЂ”</div><div class="kpi-cap">РЎРµРіРѕРґРЅСЏ</div></div>
-      <div class="card kpi"><div class="kpi-num" id="stWeek">вЂ”</div><div class="kpi-cap">Р—Р° 7 РґРЅРµР№</div></div>
-      <div class="card kpi"><div class="kpi-num" id="stTotal">вЂ”</div><div class="kpi-cap">Р’СЃРµРіРѕ</div></div>
-      <div class="card kpi"><div class="kpi-num" id="stAvg">вЂ”</div><div class="kpi-cap">РЎСЂ. РІСЂРµРјСЏ</div></div>
+      <div class="card kpi"><div class="kpi-num ok" id="stToday">—</div><div class="kpi-cap">Сегодня</div></div>
+      <div class="card kpi"><div class="kpi-num" id="stWeek">—</div><div class="kpi-cap">За 7 дней</div></div>
+      <div class="card kpi"><div class="kpi-num" id="stTotal">—</div><div class="kpi-cap">Всего</div></div>
+      <div class="card kpi"><div class="kpi-num" id="stAvg">—</div><div class="kpi-cap">Ср. время</div></div>
     </div>
 
     <div class="card">
-      <div class="card-head"><h2>РђРєС‚РёРІРЅРѕСЃС‚СЊ Р·Р° 24 С‡Р°СЃР°</h2></div>
+      <div class="card-head"><h2>Активность за 24 часа</h2></div>
       <div class="chart-box"><canvas id="chart24"></canvas></div>
     </div>
 
     <div class="card">
-      <div class="card-head"><h2>РџРѕСЃР»РµРґРЅРёРµ Р·Р°СЏРІРєРё</h2></div>
+      <div class="card-head"><h2>Последние заявки</h2></div>
       <div class="table-wrap">
         <table class="tbl">
-          <thead><tr><th>Р’СЂРµРјСЏ</th><th>Р§С‚Рѕ</th><th>РС‚РѕРі</th><th>Р”Р»РёС‚.</th></tr></thead>
+          <thead><tr><th>Время</th><th>Что</th><th>Итог</th><th>Длит.</th></tr></thead>
           <tbody id="recentBody"></tbody>
         </table>
       </div>
     </div>
 
     <div class="card">
-      <div class="card-head"><h2>РћР±СЃР»СѓР¶РёРІР°РЅРёРµ</h2><span class="qmark" data-help="reset">?</span></div>
-      <p class="hint">Р’СЃРµ РґР°РЅРЅС‹Рµ С…СЂР°РЅСЏС‚СЃСЏ РЅР° РІР°С€РµРј СЃРµСЂРІРµСЂРµ Рё РЅРµ С‚РµСЂСЏСЋС‚СЃСЏ РїСЂРё РїРµСЂРµР·Р°РїСѓСЃРєРµ. Р•СЃР»Рё РІ СЃС‚Р°С‚РёСЃС‚РёРєРµ РѕСЃС‚Р°Р»РёСЃСЊ С‚РµСЃС‚РѕРІС‹Рµ Р·Р°СЏРІРєРё вЂ” РѕР±РЅСѓР»РёС‚Рµ СЃС‡С‘С‚С‡РёРєРё.</p>
-      <button class="btn danger block" id="btnStatsReset">РћР±РЅСѓР»РёС‚СЊ СЃС‚Р°С‚РёСЃС‚РёРєСѓ</button>
+      <div class="card-head"><h2>Обслуживание</h2><span class="qmark" data-help="reset">?</span></div>
+      <p class="hint">Все данные хранятся на вашем сервере и не теряются при перезапуске. Если в статистике остались тестовые заявки — обнулите счётчики.</p>
+      <button class="btn danger block" id="btnStatsReset">Обнулить статистику</button>
     </div>
   </section>
 
-  <!-- ======================= РќРђРЎРўР РћР™РљР ======================= -->
+  <!-- ======================= НАСТРОЙКИ ======================= -->
   <section class="page" data-tab="settings">
 
-    <!-- 2. РљР»СЋС‡ -->
+    <!-- 2. Ключ -->
     <form class="card" data-save>
-      <div class="card-head"><h2>рџ”‘ Р”РѕСЃС‚СѓРї Рє РјРѕРґРµР»Рё</h2><span class="qmark" data-help="aikey">?</span></div>
+      <div class="card-head"><h2>🔑 Доступ к модели</h2><span class="qmark" data-help="aikey">?</span></div>
       <div class="field">
-        <label>API-РєР»СЋС‡ <span class="key-state" id="keyState"></span></label>
-        <input type="text" name="aiApiKey" class="mono" placeholder="AIzaвЂ¦ РёР»Рё sk-вЂ¦" autocomplete="off" spellcheck="false">
+        <label>API-ключ <span class="key-state" id="keyState"></span></label>
+        <input type="text" name="aiApiKey" class="mono" placeholder="AIza… или sk-…" autocomplete="off" spellcheck="false">
       </div>
       <div class="field">
-        <label>РњРѕРґРµР»СЊ (РїРёС€РёС‚Рµ С‚РѕС‡РЅРѕРµ РЅР°Р·РІР°РЅРёРµ)</label>
+        <label>Модель (пишите точное название)</label>
         <input type="text" name="aiModel" class="mono" list="modelList" placeholder="gemini-flash-latest" autocomplete="off" spellcheck="false">
         <datalist id="modelList">
           <option value="gemini-flash-latest"></option>
@@ -132,112 +133,112 @@
         </datalist>
       </div>
       <div class="field">
-        <label>РџСЂРѕРІР°Р№РґРµСЂ</label>
+        <label>Провайдер</label>
         <div class="seg" id="provSeg">
           <button type="button" class="seg-btn" data-base="" data-model="gemini-flash-latest">Gemini</button>
           <button type="button" class="seg-btn" data-base="https://api.openai.com/v1" data-model="gpt-4o">OpenAI</button>
           <button type="button" class="seg-btn" data-base="https://openrouter.ai/api/v1" data-model="google/gemini-2.5-flash">OpenRouter</button>
-          <button type="button" class="seg-btn" data-base="custom">РЎРІРѕР№</button>
+          <button type="button" class="seg-btn" data-base="custom">Свой</button>
         </div>
       </div>
       <div class="field">
-        <label>Base URL (РїСѓСЃС‚Рѕ = Google Gemini)</label>
+        <label>Base URL (пусто = Google Gemini)</label>
         <input type="text" name="aiBaseUrl" class="mono" placeholder="https://openrouter.ai/api/v1" autocomplete="off" spellcheck="false">
       </div>
       <div class="btn-col">
-        <button type="submit" class="btn primary block">РЎРѕС…СЂР°РЅРёС‚СЊ</button>
-        <button type="button" class="btn ghost block" id="btnAiTest">РџСЂРѕРІРµСЂРёС‚СЊ РєР»СЋС‡</button>
+        <button type="submit" class="btn primary block">Сохранить</button>
+        <button type="button" class="btn ghost block" id="btnAiTest">Проверить ключ</button>
       </div>
       <div id="aiTestOut" class="hint mt"></div>
     </form>
 
-    <!-- 3. РђРІС‚РѕР·Р°РїСѓСЃРє -->
+    <!-- 3. Автозапуск -->
     <form class="card" data-save>
-      <div class="card-head"><h2>в™»пёЏ РђРІС‚РѕР·Р°РїСѓСЃРє</h2><span class="qmark" data-help="loop">?</span></div>
+      <div class="card-head"><h2>♻️ Автозапуск</h2><span class="qmark" data-help="loop">?</span></div>
       <div class="switch-row" style="border-top:none">
-        <span class="switch-label">Р—Р°РїСѓСЃРєР°С‚СЊ Р°РіРµРЅС‚Р° РїСЂРё СЃС‚Р°СЂС‚Рµ СЃРµСЂРІРµСЂР°</span>
+        <span class="switch-label">Запускать агента при старте сервера</span>
         <label class="switch"><input type="checkbox" name="autostart"><span class="slider"></span></label>
       </div>
       <details class="adv">
-        <summary>Р”СЂСѓРіРёРµ СЂРµР¶РёРјС‹ СЂР°Р±РѕС‚С‹</summary>
+        <summary>Другие режимы работы</summary>
         <div class="field">
-          <label>Р РµР¶РёРј</label>
+          <label>Режим</label>
           <select name="mode">
-            <option value="ai">рџ¤– РР-Р°РіРµРЅС‚ (РѕР±С‹С‡РЅС‹Р№ СЂРµР¶РёРј)</option>
-            <option value="live">Р‘РѕРµРІРѕР№ вЂ” РїРѕ СЃРѕС…СЂР°РЅС‘РЅРЅС‹Рј С€Р°РіР°Рј</option>
-            <option value="simulation">Р”РµРјРѕ вЂ” СѓС‡РµР±РЅС‹Р№ СЃР°Р№С‚</option>
+            <option value="ai">🤖 ИИ-агент (обычный режим)</option>
+            <option value="live">Боевой — по сохранённым шагам</option>
+            <option value="simulation">Демо — учебный сайт</option>
           </select>
         </div>
       </details>
-      <button type="submit" class="btn primary block">РЎРѕС…СЂР°РЅРёС‚СЊ</button>
+      <button type="submit" class="btn primary block">Сохранить</button>
     </form>
 
-    <!-- 4. РЎР°Р№С‚ -->
+    <!-- 4. Сайт -->
     <form class="card" data-save>
-      <div class="card-head"><h2>рџЊђ РЎР°Р№С‚ Рё РІС…РѕРґ</h2><span class="qmark" data-help="site">?</span></div>
-      <div class="field"><label>РђРґСЂРµСЃ СЃР°Р№С‚Р°</label><input type="url" name="siteUrl" placeholder="https://example.kz"></div>
-      <div class="field"><label>РЎС‚СЂР°РЅРёС†Р° СЃРѕ Р·Р°СЏРІРєР°РјРё (РЅРµРѕР±СЏР·Р°С‚РµР»СЊРЅРѕ)</label><input type="url" name="listUrl" placeholder="https://example.kz/orders"></div>
-      <div class="field"><label>Р›РѕРіРёРЅ</label><input type="text" name="username" placeholder="login" autocomplete="off"></div>
+      <div class="card-head"><h2>🌐 Сайт и вход</h2><span class="qmark" data-help="site">?</span></div>
+      <div class="field"><label>Адрес сайта</label><input type="url" name="siteUrl" placeholder="https://example.kz"></div>
+      <div class="field"><label>Страница со заявками (необязательно)</label><input type="url" name="listUrl" placeholder="https://example.kz/orders"></div>
+      <div class="field"><label>Логин</label><input type="text" name="username" placeholder="login" autocomplete="off"></div>
       <div class="field">
-        <label>РџР°СЂРѕР»СЊ <span class="key-state" data-state-for="password"></span></label>
-        <input type="password" name="password" placeholder="вЂўвЂўвЂўвЂўвЂўвЂўвЂўвЂў" autocomplete="new-password">
+        <label>Пароль <span class="key-state" data-state-for="password"></span></label>
+        <input type="password" name="password" placeholder="••••••••" autocomplete="new-password">
       </div>
-      <button type="submit" class="btn primary block">РЎРѕС…СЂР°РЅРёС‚СЊ</button>
+      <button type="submit" class="btn primary block">Сохранить</button>
     </form>
 
-    <!-- 5. Р Р°СЃРїРёСЃР°РЅРёРµ -->
+    <!-- 5. Расписание -->
     <form class="card" data-save>
-      <div class="card-head"><h2>рџ•’ Р“СЂР°С„РёРє СЂР°Р±РѕС‚С‹</h2><span class="qmark" data-help="schedule">?</span></div>
+      <div class="card-head"><h2>🕒 График работы</h2><span class="qmark" data-help="schedule">?</span></div>
       <div class="field">
-        <label>Р РµР¶РёРј РіСЂР°С„РёРєР°</label>
+        <label>Режим графика</label>
         <select name="scheduleEnabled">
-          <option value="false">РљСЂСѓРіР»РѕСЃСѓС‚РѕС‡РЅРѕ</option>
-          <option value="true">РџРѕ С‡Р°СЃР°Рј</option>
+          <option value="false">Круглосуточно</option>
+          <option value="true">По часам</option>
         </select>
       </div>
       <div class="field-2">
-        <div class="field"><label>РЎ РєР°РєРѕРіРѕ С‡Р°СЃР°</label><input type="number" name="scheduleFrom" min="0" max="23"></div>
-        <div class="field"><label>Р”Рѕ РєР°РєРѕРіРѕ С‡Р°СЃР°</label><input type="number" name="scheduleTo" min="0" max="23"></div>
+        <div class="field"><label>С какого часа</label><input type="number" name="scheduleFrom" min="0" max="23"></div>
+        <div class="field"><label>До какого часа</label><input type="number" name="scheduleTo" min="0" max="23"></div>
       </div>
-      <button type="submit" class="btn primary block">РЎРѕС…СЂР°РЅРёС‚СЊ</button>
+      <button type="submit" class="btn primary block">Сохранить</button>
     </form>
 
-    <!-- 6. РџРѕРІРµРґРµРЅРёРµ -->
+    <!-- 6. Поведение -->
     <form class="card" data-save>
-      <div class="card-head"><h2>вљ™пёЏ РџРѕРІРµРґРµРЅРёРµ</h2><span class="qmark" data-help="behavior">?</span></div>
+      <div class="card-head"><h2>⚙️ Поведение</h2><span class="qmark" data-help="behavior">?</span></div>
       <div class="field">
-        <label>РЎРєРѕСЂРѕСЃС‚СЊ: <b id="speedVal">Г—1</b></label>
+        <label>Скорость: <b id="speedVal">×1</b></label>
         <input type="range" id="speedRange" name="speed" min="0.25" max="3" step="0.25">
       </div>
       <div class="field-2">
-        <div class="field"><label>РџР°СѓР·Р° РјРµР¶РґСѓ РґРµР№СЃС‚РІРёСЏРјРё, РјСЃ</label><input type="number" name="actionDelayMs" min="200" max="10000" step="100"></div>
-        <div class="field"><label>Keep-alive, СЃРµРє</label><input type="number" name="keepaliveSec" min="30" max="900" step="10"></div>
+        <div class="field"><label>Пауза между действиями, мс</label><input type="number" name="actionDelayMs" min="200" max="10000" step="100"></div>
+        <div class="field"><label>Keep-alive, сек</label><input type="number" name="keepaliveSec" min="30" max="900" step="10"></div>
       </div>
-      <div class="field"><label>РћР¶РёРґР°РЅРёРµ РїСЂРѕРІРµСЂРєРё Р±РµР·РѕРїР°СЃРЅРѕСЃС‚Рё, РјРёРЅ</label><input type="number" name="securityTimeoutMin" min="5" max="120" step="5"></div>
+      <div class="field"><label>Ожидание проверки безопасности, мин</label><input type="number" name="securityTimeoutMin" min="5" max="120" step="5"></div>
       <div class="switch-row">
-        <span class="switch-label">РЎРѕС…СЂР°РЅСЏС‚СЊ СЃРєСЂРёРЅС€РѕС‚-РґРѕРєР°Р·Р°С‚РµР»СЊСЃС‚РІРѕ</span>
+        <span class="switch-label">Сохранять скриншот-доказательство</span>
         <label class="switch"><input type="checkbox" name="evidenceShots"><span class="slider"></span></label>
       </div>
-      <button type="submit" class="btn primary block">РЎРѕС…СЂР°РЅРёС‚СЊ</button>
+      <button type="submit" class="btn primary block">Сохранить</button>
     </form>
 
     <!-- 7. Telegram -->
     <form class="card" data-save>
-      <div class="card-head"><h2>рџ“Ё РЈРІРµРґРѕРјР»РµРЅРёСЏ</h2><span class="qmark" data-help="telegram">?</span></div>
-      <div class="field"><label>Telegram bot token <span class="key-state" data-state-for="telegramToken"></span></label><input type="password" name="telegramToken" placeholder="вЂўвЂўвЂўвЂўвЂўвЂўвЂўвЂў" autocomplete="new-password"></div>
+      <div class="card-head"><h2>📨 Уведомления</h2><span class="qmark" data-help="telegram">?</span></div>
+      <div class="field"><label>Telegram bot token <span class="key-state" data-state-for="telegramToken"></span></label><input type="password" name="telegramToken" placeholder="••••••••" autocomplete="new-password"></div>
       <div class="field"><label>Chat ID</label><input type="text" name="telegramChatId" placeholder="123456789"></div>
-      <button type="submit" class="btn primary block">РЎРѕС…СЂР°РЅРёС‚СЊ</button>
+      <button type="submit" class="btn primary block">Сохранить</button>
     </form>
   </section>
 
-  <!-- ======================= Р–РЈР РќРђР› ======================= -->
+  <!-- ======================= ЖУРНАЛ ======================= -->
   <section class="page" data-tab="journal">
     <div class="chips" id="journalChips">
-      <button class="chip active" data-cat="">Р’СЃРµ</button>
-      <button class="chip" data-cat="WORKFLOW">рџ“‹ Р Р°Р±РѕС‚Р°</button>
-      <button class="chip" data-cat="AUTH">рџ”ђ Р’С…РѕРґ</button>
-      <button class="chip" data-cat="SECURITY">рџ›Ў Р—Р°С‰РёС‚Р°</button>
-      <button class="chip" data-cat="SYSTEM">вљ™пёЏ РЎРёСЃС‚РµРјР°</button>
+      <button class="chip active" data-cat="">Все</button>
+      <button class="chip" data-cat="WORKFLOW">📋 Работа</button>
+      <button class="chip" data-cat="AUTH">🔐 Вход</button>
+      <button class="chip" data-cat="SECURITY">🛡 Защита</button>
+      <button class="chip" data-cat="SYSTEM">⚙️ Система</button>
     </div>
     <div class="card"><div class="feed tall" id="journalFeed"></div></div>
   </section>
@@ -249,18 +250,18 @@
 </main>
 
 <nav class="tabbar">
-  <button class="tab active" data-tab="panel"><b>рџ“Љ</b><span>РџР°РЅРµР»СЊ</span></button>
-  <button class="tab" data-tab="analytics"><b>рџ“€</b><span>РЎС‚Р°С‚РёСЃС‚РёРєР°</span></button>
-  <button class="tab" data-tab="settings"><b>вљ™пёЏ</b><span>РќР°СЃС‚СЂРѕР№РєРё</span></button>
-  <button class="tab" data-tab="journal"><b>рџ“њ</b><span>Р–СѓСЂРЅР°Р»</span></button>
-  <button class="tab" data-tab="vnc"><b>рџ–Ґ</b><span>Р­РєСЂР°РЅ</span></button>
+  <button class="tab active" data-tab="panel"><b>📊</b><span>Панель</span></button>
+  <button class="tab" data-tab="analytics"><b>📈</b><span>Статистика</span></button>
+  <button class="tab" data-tab="settings"><b>⚙️</b><span>Настройки</span></button>
+  <button class="tab" data-tab="journal"><b>📜</b><span>Журнал</span></button>
+  <button class="tab" data-tab="vnc"><b>🖥</b><span>Экран</span></button>
 </nav>
 
 <div class="toast" id="toast"></div>
 
 <div class="modal hidden" id="helpModal">
   <div class="modal-card">
-    <div class="modal-head"><b id="helpTitle">?</b><button class="icon-btn" id="helpClose">вњ•</button></div>
+    <div class="modal-head"><b id="helpTitle">?</b><button class="icon-btn" id="helpClose">✕</button></div>
     <div class="modal-body" id="helpBody"></div>
   </div>
 </div>
@@ -268,4 +269,3 @@
 <script src="/js/app.js"></script>
 </body>
 </html>
-
