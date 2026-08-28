@@ -67,6 +67,17 @@ function renderStatus() {
   setText('#kToday', snap.processedToday);
   setText('#kUp', live ? dur(snap.uptimeSec) : '—');
 
+  if ($('#btnAiRun')) {
+    const r = snap.running;
+    $('#btnAiRun').disabled = r;
+    $('#btnAiRun').style.opacity = r ? '0.3' : '1';
+    $('#btnAiRun').classList.toggle('active-glow', !r);
+    
+    $('#btnAiStop').disabled = !r;
+    $('#btnAiStop').style.opacity = !r ? '0.3' : '1';
+    $('#btnAiStop').classList.toggle('active-glow', r);
+  }
+
   const alert = ['AUTH_REQUIRED', 'MANUAL_REVIEW', 'ERROR'].includes(snap.state);
   $$('.tab[data-tab="vnc"]').forEach((b) => b.classList.toggle('alert', alert));
 }
