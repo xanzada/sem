@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
@@ -8,7 +8,7 @@ const COLORS = {
   AUTH_REQUIRED: '#f59e0b', SECURITY_VERIFICATION_WAIT: '#38bdf8',
   MANUAL_REVIEW: '#f97316', ERROR: '#ef4444', STOPPED: '#6b7280',
 };
-const CAT = { SYSTEM: '⚙️', CONTROL: '🎛', WORKFLOW: '📋', AUTH: '🔐', SECURITY: '🛡' };
+const CAT = { SYSTEM: 'вљ™пёЏ', CONTROL: 'рџЋ›', WORKFLOW: 'рџ“‹', AUTH: 'рџ”ђ', SECURITY: 'рџ›Ў' };
 
 let snap = null;
 let chart = null;
@@ -35,10 +35,10 @@ function esc(s) {
 const hhmmss = (iso) => new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 const dmhm = (iso) => new Date(iso).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 function dur(sec) {
-  if (sec < 60) return sec + ' с';
+  if (sec < 60) return sec + ' СЃ';
   const m = Math.floor(sec / 60);
-  if (m < 60) return m + ' мин';
-  return Math.floor(m / 60) + ' ч ' + (m % 60) + ' м';
+  if (m < 60) return m + ' РјРёРЅ';
+  return Math.floor(m / 60) + ' С‡ ' + (m % 60) + ' Рј';
 }
 
 /* ---------------- status ---------------- */
@@ -54,7 +54,7 @@ function renderStatus() {
 
   setText('#stateRu', snap.emoji + ' ' + snap.stateRu);
   setText('#stateSub', snap.paused && snap.running
-    ? 'На паузе' : (live ? 'В работе · ' + dur(snap.uptimeSec) : 'Ожидание команды'));
+    ? 'РќР° РїР°СѓР·Рµ' : (live ? 'Р’ СЂР°Р±РѕС‚Рµ В· ' + dur(snap.uptimeSec) : 'РћР¶РёРґР°РЅРёРµ РєРѕРјР°РЅРґС‹'));
 
   $('#bigOrb').classList.toggle('live', live);
   $('#brandOrb').classList.toggle('live', live);
@@ -63,14 +63,11 @@ function renderStatus() {
     el.style.borderColor = color;
   });
 
-  setText('#modeBadge', snap.mode === 'ai' ? 'ИИ-АГЕНТ' : snap.mode === 'simulation' ? 'ДЕМО' : 'БОЕВОЙ');
+  setText('#modeBadge', snap.mode === 'ai' ? 'РР-РђР“Р•РќРў' : snap.mode === 'simulation' ? 'Р”Р•РњРћ' : 'Р‘РћР•Р’РћР™');
   setText('#kToday', snap.processedToday);
-  setText('#kUp', live ? dur(snap.uptimeSec) : '—');
+  setText('#kUp', live ? dur(snap.uptimeSec) : 'вЂ”');
 
   $('#btnStart').disabled = snap.running && !snap.paused;
-  $('#btnPause').disabled = !snap.running;
-  $('#btnPause').querySelector('span').textContent = snap.paused ? 'Продолж.' : 'Пауза';
-  $('#btnPause').querySelector('b').textContent = snap.paused ? '▶' : '⏸';
 
   const alert = ['AUTH_REQUIRED', 'MANUAL_REVIEW', 'ERROR'].includes(snap.state);
   $$('.tab[data-tab="vnc"]').forEach((b) => b.classList.toggle('alert', alert));
@@ -110,7 +107,7 @@ async function loadStats() {
   $('#stToday').textContent = a.today;
   $('#stWeek').textContent = a.week;
   $('#stTotal').textContent = a.total;
-  $('#stAvg').textContent = a.avgDurationMs ? (a.avgDurationMs / 1000).toFixed(1) + ' с' : '—';
+  $('#stAvg').textContent = a.avgDurationMs ? (a.avgDurationMs / 1000).toFixed(1) + ' СЃ' : 'вЂ”';
   setText('#kWeek', a.week);
   setText('#kAi', a.aiToday ?? 0);
 
@@ -118,10 +115,10 @@ async function loadStats() {
   tb.innerHTML = '';
   a.recent.forEach((r) => {
     const tr = document.createElement('tr');
-    const what = r.action === 'ai-task' ? '🤖 Задача ИИ' : '#' + esc(r.application_id);
+    const what = r.action === 'ai-task' ? 'рџ¤– Р—Р°РґР°С‡Р° РР' : '#' + esc(r.application_id);
     tr.innerHTML = `<td>${dmhm(r.ts)}</td><td>${what}</td>
-      <td><span class="tag">${r.result === 'done' ? 'выполнено' : 'принята'}</span></td>
-      <td>${r.duration_ms ? (r.duration_ms / 1000).toFixed(1) + ' с' : '—'}</td>`;
+      <td><span class="tag">${r.result === 'done' ? 'РІС‹РїРѕР»РЅРµРЅРѕ' : 'РїСЂРёРЅСЏС‚Р°'}</span></td>
+      <td>${r.duration_ms ? (r.duration_ms / 1000).toFixed(1) + ' СЃ' : 'вЂ”'}</td>`;
     tb.appendChild(tr);
   });
 
@@ -157,26 +154,26 @@ async function loadSettings(force) {
     });
   });
   const sp = $('#speedRange');
-  if (sp) { sp.value = s.speed; $('#speedVal').textContent = '×' + Number(s.speed); }
+  if (sp) { sp.value = s.speed; $('#speedVal').textContent = 'Г—' + Number(s.speed); }
 
-  /* Секреты сервер наружу не отдаёт, поэтому поле остаётся пустым —
-   * без этой подписи кажется, что пароль не сохранился. */
+  /* РЎРµРєСЂРµС‚С‹ СЃРµСЂРІРµСЂ РЅР°СЂСѓР¶Сѓ РЅРµ РѕС‚РґР°С‘С‚, РїРѕСЌС‚РѕРјСѓ РїРѕР»Рµ РѕСЃС‚Р°С‘С‚СЃСЏ РїСѓСЃС‚С‹Рј вЂ”
+   * Р±РµР· СЌС‚РѕР№ РїРѕРґРїРёСЃРё РєР°Р¶РµС‚СЃСЏ, С‡С‚Рѕ РїР°СЂРѕР»СЊ РЅРµ СЃРѕС…СЂР°РЅРёР»СЃСЏ. */
   $$('[data-state-for]').forEach((tag) => {
     const saved = s[tag.dataset.stateFor + 'Set'] === true;
-    tag.textContent = saved ? '· сохранён' : '· не задан';
+    tag.textContent = saved ? 'В· СЃРѕС…СЂР°РЅС‘РЅ' : 'В· РЅРµ Р·Р°РґР°РЅ';
     tag.className = 'key-state ' + (saved ? 'ok' : 'no');
     const input = document.querySelector(`[name=${tag.dataset.stateFor}]`);
-    if (input && saved && !input.value) input.placeholder = 'Сохранён — оставьте пустым или введите новый';
+    if (input && saved && !input.value) input.placeholder = 'РЎРѕС…СЂР°РЅС‘РЅ вЂ” РѕСЃС‚Р°РІСЊС‚Рµ РїСѓСЃС‚С‹Рј РёР»Рё РІРІРµРґРёС‚Рµ РЅРѕРІС‹Р№';
   });
 
   const ks = $('#keyState');
   if (ks) {
-    ks.textContent = s.aiApiKeySet ? '· сохранён' : '· не задан';
+    ks.textContent = s.aiApiKeySet ? 'В· СЃРѕС…СЂР°РЅС‘РЅ' : 'В· РЅРµ Р·Р°РґР°РЅ';
     ks.className = 'key-state ' + (s.aiApiKeySet ? 'ok' : 'no');
   }
   const keyInput = document.querySelector('input[name=aiApiKey]');
   if (keyInput && s.aiApiKeySet && !keyInput.value) {
-    keyInput.placeholder = 'Ключ сохранён — оставьте пустым или введите новый';
+    keyInput.placeholder = 'РљР»СЋС‡ СЃРѕС…СЂР°РЅС‘РЅ вЂ” РѕСЃС‚Р°РІСЊС‚Рµ РїСѓСЃС‚С‹Рј РёР»Рё РІРІРµРґРёС‚Рµ РЅРѕРІС‹Р№';
   }
   markProvider(s.aiBaseUrl || '');
 
@@ -195,15 +192,15 @@ async function loadVnc() {
   const el = $('#vncWrap');
   if (!el) return;
   if (vncLoaded && el.querySelector('iframe')) return;
-  el.innerHTML = '<div class="hint" style="padding:16px">⏳ Подключаюсь к экрану…</div>';
+  el.innerHTML = '<div class="hint" style="padding:16px">вЏі РџРѕРґРєР»СЋС‡Р°СЋСЃСЊ Рє СЌРєСЂР°РЅСѓвЂ¦</div>';
   const meta = await api('/api/meta').catch(() => ({}));
   if (meta.vncUrl) {
     el.innerHTML = `<iframe src="${meta.vncUrl}" allow="clipboard-read; clipboard-write"></iframe>`;
     vncLoaded = true;
   } else {
     el.innerHTML =
-      '<div class="hint" style="padding:16px">Экран пока недоступен: noVNC не запущен.<br><br>' +
-      '<button class="btn ghost block" id="btnVncRetry">Повторить</button></div>';
+      '<div class="hint" style="padding:16px">Р­РєСЂР°РЅ РїРѕРєР° РЅРµРґРѕСЃС‚СѓРїРµРЅ: noVNC РЅРµ Р·Р°РїСѓС‰РµРЅ.<br><br>' +
+      '<button class="btn ghost block" id="btnVncRetry">РџРѕРІС‚РѕСЂРёС‚СЊ</button></div>';
     vncLoaded = false;
     const rb = $('#btnVncRetry');
     if (rb) rb.addEventListener('click', () => loadVnc().catch(() => {}));
@@ -225,17 +222,17 @@ function bindSaveForms() {
       });
       const btn = form.querySelector('button[type=submit]');
       const old = btn.textContent;
-      btn.disabled = true; btn.textContent = 'Сохраняю…';
+      btn.disabled = true; btn.textContent = 'РЎРѕС…СЂР°РЅСЏСЋвЂ¦';
       try {
         await api('/api/settings', {
           method: 'POST', headers: { 'content-type': 'application/json' },
           body: JSON.stringify(patch),
         });
-        toast('✅ Сохранено');
+        toast('вњ… РЎРѕС…СЂР°РЅРµРЅРѕ');
         Array.from(form.elements).forEach((el) => { el.dataset.dirty = ''; });
         await loadSettings(true);
         pullStatus();
-      } catch (e) { toast('Ошибка: ' + e.message); }
+      } catch (e) { toast('РћС€РёР±РєР°: ' + e.message); }
       btn.disabled = false; btn.textContent = old;
     });
   });
@@ -288,7 +285,7 @@ async function control(cmd) {
       body: JSON.stringify({ cmd }),
     });
     if (r.snap) { snap = r.snap; renderStatus(); }
-  } catch (e) { toast('Ошибка: ' + e.message); }
+  } catch (e) { toast('РћС€РёР±РєР°: ' + e.message); }
 }
 function pullStatus() {
   api('/api/status').then((d) => { snap = d.snap; renderStatus(); }).catch(() => {});
@@ -297,9 +294,9 @@ function pullStatus() {
 /* ---------------- AI agent ---------------- */
 function renderAgent(st) {
   const html = (!st || (!st.running && !st.lastAction)) ? '' : `
-    <div class="ai-live-head">${st.running ? '<span class="ai-dot"></span> Агент работает' : '⏹ Остановлен'}
-      ${st.step ? `<span class="ai-step">шаг ${st.step}</span>` : ''}</div>
-    ${st.task ? `<div class="ai-task">🎯 ${esc(st.task)}</div>` : ''}
+    <div class="ai-live-head">${st.running ? '<span class="ai-dot"></span> РђРіРµРЅС‚ СЂР°Р±РѕС‚Р°РµС‚' : 'вЏ№ РћСЃС‚Р°РЅРѕРІР»РµРЅ'}
+      ${st.step ? `<span class="ai-step">С€Р°Рі ${st.step}</span>` : ''}</div>
+    ${st.task ? `<div class="ai-task">рџЋЇ ${esc(st.task)}</div>` : ''}
     ${st.lastAction ? `<div class="ai-act">${esc(st.lastAction)}</div>` : ''}`;
   const el = $('#aiLive'); if (el) el.innerHTML = html;
 }
@@ -309,70 +306,70 @@ async function refreshAgent() {
 async function runTask(inputSel, btnSel) {
   const field = document.querySelector(inputSel);
   const task = (field?.value || '').trim();
-  if (!task) { toast('Напишите задачу'); return; }
+  if (!task) { toast('РќР°РїРёС€РёС‚Рµ Р·Р°РґР°С‡Сѓ'); return; }
   try {
     await api('/api/settings', {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ aiInstruction: task }),
     });
-  } catch { /* сохраним при следующем Save */ }
+  } catch { /* СЃРѕС…СЂР°РЅРёРј РїСЂРё СЃР»РµРґСѓСЋС‰РµРј Save */ }
   const btn = $(btnSel);
   const old = btn.textContent;
-  btn.disabled = true; btn.textContent = '⏳ Агент работает…';
+  btn.disabled = true; btn.textContent = 'вЏі РђРіРµРЅС‚ СЂР°Р±РѕС‚Р°РµС‚вЂ¦';
   try {
     const r = await api('/api/ai/run', {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ task }),
     });
-    if (!r.ok) toast('❌ ' + (r.reason || 'Ошибка'));
-    else if (r.done) toast(`✅ Готово за ${r.steps} шаг(ов)`);
-    else toast('⚠️ ' + (r.reason || 'Не завершено'));
-  } catch (e) { toast('Ошибка: ' + e.message); }
+    if (!r.ok) toast('вќЊ ' + (r.reason || 'РћС€РёР±РєР°'));
+    else if (r.done) toast(`вњ… Р“РѕС‚РѕРІРѕ Р·Р° ${r.steps} С€Р°Рі(РѕРІ)`);
+    else toast('вљ пёЏ ' + (r.reason || 'РќРµ Р·Р°РІРµСЂС€РµРЅРѕ'));
+  } catch (e) { toast('РћС€РёР±РєР°: ' + e.message); }
   btn.disabled = false; btn.textContent = old;
   refreshAgent(); loadStats().catch(() => {}); }
 
 /* ---------------- help ---------------- */
 const HELP = {
-  ai: ['🤖 Команда агенту', `Одна задача — агент делает её и повторяет по расписанию.<br><br>
-<b>▶ Выполнить сейчас</b> — сделать один раз прямо сейчас.<br>
-<b>Повторять по расписанию</b> — включите и укажите интервал (например 5 минут). Затем ▶ Старт сверху — агент будет работать сам круглосуточно.<br>
-<b>Лимит шагов</b> — сколько действий максимум за один проход (защита от лишних расходов).<br><br>
-Пишите обычными словами:<br>
-• <i>«Войди на сайт: логин admin, пароль 12345»</i><br>
-• <i>«Открой список заявок и прими первую новую»</i><br>
-• <i>«Найди заявку №184, нажми Принять и подтверди в окне»</i><br><br>
-Ниже кнопки видно каждый шаг агента, а во вкладке <b>Экран</b> — картинку браузера.<br><br>
-Нужен ключ Gemini — см. карточку «Доступ к Gemini».`],
-  aikey: ['🔑 Доступ к модели', `<b>Google Gemini (по умолчанию):</b><br>
-1. Откройте <b>aistudio.google.com/apikey</b><br>
-2. Войдите Google-аккаунтом<br>
-3. «Create API key» → скопируйте (начинается на <code>AIza…</code>)<br>
-4. Вставьте здесь → <b>Сохранить</b> → <b>Проверить ключ</b><br><br>
-5. Base URL оставьте пустым<br><br>
-<b>Другой провайдер</b> (OpenRouter, свой прокси, локальная модель):<br>
-• Base URL: <code>https://openrouter.ai/api/v1</code><br>
-• Модель: <code>google/gemini-2.5-flash</code> или <code>anthropic/claude-sonnet-4.5</code><br>
-• Ключ: ваш <code>sk-…</code><br><br>
-Модель нужно выбирать <b>с поддержкой картинок</b> (vision) — агент работает по скриншоту.
-Название пишите точно как у провайдера. Ключ хранится только на вашем сервере.`],
-  loop: ['♻️ Автозапуск', `Если включено — после перезапуска сервера агент поднимется сам и продолжит работать по вашей задаче.<br><br>
-«Другие режимы» нужны редко: обычный режим — <b>🤖 ИИ-агент</b>.`],
-  site: ['🌐 Сайт и вход', `Адрес сайта, где работает агент, и данные для входа.<br><br>
-Если сессия истечёт — бот войдёт сам по этим данным. Если понадобится код из SMS, вы получите уведомление, введёте код во вкладке <b>Экран</b>, и агент продолжит.<br><br>
-Пароль хранится только на вашем сервере.`],
-  schedule: ['🕒 График работы', `<b>Круглосуточно</b> — агент работает всегда.<br><br>
-<b>По часам</b> — например с 9 до 21 (по Алматы). Вне графика агент ставит паузу и закрывает браузер, чтобы сервер отдыхал, а утром поднимается сам.`],
-  behavior: ['⚙️ Поведение', `<b>Скорость</b> — множитель пауз: 0.5 быстрее, 2 медленнее и осторожнее.<br><br>
-<b>Пауза между действиями</b> — 800 мс похоже на человека.<br><br>
-<b>Keep-alive</b> — как часто напоминать сайту о себе, чтобы не разлогинило (180 сек).<br><br>
-<b>Скриншот-доказательство</b> — снимок после каждой принятой заявки, виден в Журнале.`],
-  telegram: ['📨 Уведомления', `Сообщим, если нужен вход, появилась проверка безопасности или требуется ваше внимание.<br><br>
-1. @BotFather → создайте бота → получите token<br>
-2. Напишите своему боту любое сообщение<br>
-3. @userinfobot → узнайте свой chat_id<br>
-4. Вставьте оба значения и сохраните.`],
-  reset: ['🧹 Обнулить статистику', `Удалит историю заявок и счётчики (сегодня / 7 дней / всего).<br><br>
-Журнал событий и настройки останутся. Полезно, если в статистике накопились тестовые запуски.`],
+  ai: ['рџ¤– РљРѕРјР°РЅРґР° Р°РіРµРЅС‚Сѓ', `РћРґРЅР° Р·Р°РґР°С‡Р° вЂ” Р°РіРµРЅС‚ РґРµР»Р°РµС‚ РµС‘ Рё РїРѕРІС‚РѕСЂСЏРµС‚ РїРѕ СЂР°СЃРїРёСЃР°РЅРёСЋ.<br><br>
+<b>в–¶ Р’С‹РїРѕР»РЅРёС‚СЊ СЃРµР№С‡Р°СЃ</b> вЂ” СЃРґРµР»Р°С‚СЊ РѕРґРёРЅ СЂР°Р· РїСЂСЏРјРѕ СЃРµР№С‡Р°СЃ.<br>
+<b>РџРѕРІС‚РѕСЂСЏС‚СЊ РїРѕ СЂР°СЃРїРёСЃР°РЅРёСЋ</b> вЂ” РІРєР»СЋС‡РёС‚Рµ Рё СѓРєР°Р¶РёС‚Рµ РёРЅС‚РµСЂРІР°Р» (РЅР°РїСЂРёРјРµСЂ 5 РјРёРЅСѓС‚). Р—Р°С‚РµРј в–¶ РЎС‚Р°СЂС‚ СЃРІРµСЂС…Сѓ вЂ” Р°РіРµРЅС‚ Р±СѓРґРµС‚ СЂР°Р±РѕС‚Р°С‚СЊ СЃР°Рј РєСЂСѓРіР»РѕСЃСѓС‚РѕС‡РЅРѕ.<br>
+<b>Р›РёРјРёС‚ С€Р°РіРѕРІ</b> вЂ” СЃРєРѕР»СЊРєРѕ РґРµР№СЃС‚РІРёР№ РјР°РєСЃРёРјСѓРј Р·Р° РѕРґРёРЅ РїСЂРѕС…РѕРґ (Р·Р°С‰РёС‚Р° РѕС‚ Р»РёС€РЅРёС… СЂР°СЃС…РѕРґРѕРІ).<br><br>
+РџРёС€РёС‚Рµ РѕР±С‹С‡РЅС‹РјРё СЃР»РѕРІР°РјРё:<br>
+вЂў <i>В«Р’РѕР№РґРё РЅР° СЃР°Р№С‚: Р»РѕРіРёРЅ admin, РїР°СЂРѕР»СЊ 12345В»</i><br>
+вЂў <i>В«РћС‚РєСЂРѕР№ СЃРїРёСЃРѕРє Р·Р°СЏРІРѕРє Рё РїСЂРёРјРё РїРµСЂРІСѓСЋ РЅРѕРІСѓСЋВ»</i><br>
+вЂў <i>В«РќР°Р№РґРё Р·Р°СЏРІРєСѓ в„–184, РЅР°Р¶РјРё РџСЂРёРЅСЏС‚СЊ Рё РїРѕРґС‚РІРµСЂРґРё РІ РѕРєРЅРµВ»</i><br><br>
+РќРёР¶Рµ РєРЅРѕРїРєРё РІРёРґРЅРѕ РєР°Р¶РґС‹Р№ С€Р°Рі Р°РіРµРЅС‚Р°, Р° РІРѕ РІРєР»Р°РґРєРµ <b>Р­РєСЂР°РЅ</b> вЂ” РєР°СЂС‚РёРЅРєСѓ Р±СЂР°СѓР·РµСЂР°.<br><br>
+РќСѓР¶РµРЅ РєР»СЋС‡ Gemini вЂ” СЃРј. РєР°СЂС‚РѕС‡РєСѓ В«Р”РѕСЃС‚СѓРї Рє GeminiВ».`],
+  aikey: ['рџ”‘ Р”РѕСЃС‚СѓРї Рє РјРѕРґРµР»Рё', `<b>Google Gemini (РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ):</b><br>
+1. РћС‚РєСЂРѕР№С‚Рµ <b>aistudio.google.com/apikey</b><br>
+2. Р’РѕР№РґРёС‚Рµ Google-Р°РєРєР°СѓРЅС‚РѕРј<br>
+3. В«Create API keyВ» в†’ СЃРєРѕРїРёСЂСѓР№С‚Рµ (РЅР°С‡РёРЅР°РµС‚СЃСЏ РЅР° <code>AIzaвЂ¦</code>)<br>
+4. Р’СЃС‚Р°РІСЊС‚Рµ Р·РґРµСЃСЊ в†’ <b>РЎРѕС…СЂР°РЅРёС‚СЊ</b> в†’ <b>РџСЂРѕРІРµСЂРёС‚СЊ РєР»СЋС‡</b><br><br>
+5. Base URL РѕСЃС‚Р°РІСЊС‚Рµ РїСѓСЃС‚С‹Рј<br><br>
+<b>Р”СЂСѓРіРѕР№ РїСЂРѕРІР°Р№РґРµСЂ</b> (OpenRouter, СЃРІРѕР№ РїСЂРѕРєСЃРё, Р»РѕРєР°Р»СЊРЅР°СЏ РјРѕРґРµР»СЊ):<br>
+вЂў Base URL: <code>https://openrouter.ai/api/v1</code><br>
+вЂў РњРѕРґРµР»СЊ: <code>google/gemini-2.5-flash</code> РёР»Рё <code>anthropic/claude-sonnet-4.5</code><br>
+вЂў РљР»СЋС‡: РІР°С€ <code>sk-вЂ¦</code><br><br>
+РњРѕРґРµР»СЊ РЅСѓР¶РЅРѕ РІС‹Р±РёСЂР°С‚СЊ <b>СЃ РїРѕРґРґРµСЂР¶РєРѕР№ РєР°СЂС‚РёРЅРѕРє</b> (vision) вЂ” Р°РіРµРЅС‚ СЂР°Р±РѕС‚Р°РµС‚ РїРѕ СЃРєСЂРёРЅС€РѕС‚Сѓ.
+РќР°Р·РІР°РЅРёРµ РїРёС€РёС‚Рµ С‚РѕС‡РЅРѕ РєР°Рє Сѓ РїСЂРѕРІР°Р№РґРµСЂР°. РљР»СЋС‡ С…СЂР°РЅРёС‚СЃСЏ С‚РѕР»СЊРєРѕ РЅР° РІР°С€РµРј СЃРµСЂРІРµСЂРµ.`],
+  loop: ['в™»пёЏ РђРІС‚РѕР·Р°РїСѓСЃРє', `Р•СЃР»Рё РІРєР»СЋС‡РµРЅРѕ вЂ” РїРѕСЃР»Рµ РїРµСЂРµР·Р°РїСѓСЃРєР° СЃРµСЂРІРµСЂР° Р°РіРµРЅС‚ РїРѕРґРЅРёРјРµС‚СЃСЏ СЃР°Рј Рё РїСЂРѕРґРѕР»Р¶РёС‚ СЂР°Р±РѕС‚Р°С‚СЊ РїРѕ РІР°С€РµР№ Р·Р°РґР°С‡Рµ.<br><br>
+В«Р”СЂСѓРіРёРµ СЂРµР¶РёРјС‹В» РЅСѓР¶РЅС‹ СЂРµРґРєРѕ: РѕР±С‹С‡РЅС‹Р№ СЂРµР¶РёРј вЂ” <b>рџ¤– РР-Р°РіРµРЅС‚</b>.`],
+  site: ['рџЊђ РЎР°Р№С‚ Рё РІС…РѕРґ', `РђРґСЂРµСЃ СЃР°Р№С‚Р°, РіРґРµ СЂР°Р±РѕС‚Р°РµС‚ Р°РіРµРЅС‚, Рё РґР°РЅРЅС‹Рµ РґР»СЏ РІС…РѕРґР°.<br><br>
+Р•СЃР»Рё СЃРµСЃСЃРёСЏ РёСЃС‚РµС‡С‘С‚ вЂ” Р±РѕС‚ РІРѕР№РґС‘С‚ СЃР°Рј РїРѕ СЌС‚РёРј РґР°РЅРЅС‹Рј. Р•СЃР»Рё РїРѕРЅР°РґРѕР±РёС‚СЃСЏ РєРѕРґ РёР· SMS, РІС‹ РїРѕР»СѓС‡РёС‚Рµ СѓРІРµРґРѕРјР»РµРЅРёРµ, РІРІРµРґС‘С‚Рµ РєРѕРґ РІРѕ РІРєР»Р°РґРєРµ <b>Р­РєСЂР°РЅ</b>, Рё Р°РіРµРЅС‚ РїСЂРѕРґРѕР»Р¶РёС‚.<br><br>
+РџР°СЂРѕР»СЊ С…СЂР°РЅРёС‚СЃСЏ С‚РѕР»СЊРєРѕ РЅР° РІР°С€РµРј СЃРµСЂРІРµСЂРµ.`],
+  schedule: ['рџ•’ Р“СЂР°С„РёРє СЂР°Р±РѕС‚С‹', `<b>РљСЂСѓРіР»РѕСЃСѓС‚РѕС‡РЅРѕ</b> вЂ” Р°РіРµРЅС‚ СЂР°Р±РѕС‚Р°РµС‚ РІСЃРµРіРґР°.<br><br>
+<b>РџРѕ С‡Р°СЃР°Рј</b> вЂ” РЅР°РїСЂРёРјРµСЂ СЃ 9 РґРѕ 21 (РїРѕ РђР»РјР°С‚С‹). Р’РЅРµ РіСЂР°С„РёРєР° Р°РіРµРЅС‚ СЃС‚Р°РІРёС‚ РїР°СѓР·Сѓ Рё Р·Р°РєСЂС‹РІР°РµС‚ Р±СЂР°СѓР·РµСЂ, С‡С‚РѕР±С‹ СЃРµСЂРІРµСЂ РѕС‚РґС‹С…Р°Р», Р° СѓС‚СЂРѕРј РїРѕРґРЅРёРјР°РµС‚СЃСЏ СЃР°Рј.`],
+  behavior: ['вљ™пёЏ РџРѕРІРµРґРµРЅРёРµ', `<b>РЎРєРѕСЂРѕСЃС‚СЊ</b> вЂ” РјРЅРѕР¶РёС‚РµР»СЊ РїР°СѓР·: 0.5 Р±С‹СЃС‚СЂРµРµ, 2 РјРµРґР»РµРЅРЅРµРµ Рё РѕСЃС‚РѕСЂРѕР¶РЅРµРµ.<br><br>
+<b>РџР°СѓР·Р° РјРµР¶РґСѓ РґРµР№СЃС‚РІРёСЏРјРё</b> вЂ” 800 РјСЃ РїРѕС…РѕР¶Рµ РЅР° С‡РµР»РѕРІРµРєР°.<br><br>
+<b>Keep-alive</b> вЂ” РєР°Рє С‡Р°СЃС‚Рѕ РЅР°РїРѕРјРёРЅР°С‚СЊ СЃР°Р№С‚Сѓ Рѕ СЃРµР±Рµ, С‡С‚РѕР±С‹ РЅРµ СЂР°Р·Р»РѕРіРёРЅРёР»Рѕ (180 СЃРµРє).<br><br>
+<b>РЎРєСЂРёРЅС€РѕС‚-РґРѕРєР°Р·Р°С‚РµР»СЊСЃС‚РІРѕ</b> вЂ” СЃРЅРёРјРѕРє РїРѕСЃР»Рµ РєР°Р¶РґРѕР№ РїСЂРёРЅСЏС‚РѕР№ Р·Р°СЏРІРєРё, РІРёРґРµРЅ РІ Р–СѓСЂРЅР°Р»Рµ.`],
+  telegram: ['рџ“Ё РЈРІРµРґРѕРјР»РµРЅРёСЏ', `РЎРѕРѕР±С‰РёРј, РµСЃР»Рё РЅСѓР¶РµРЅ РІС…РѕРґ, РїРѕСЏРІРёР»Р°СЃСЊ РїСЂРѕРІРµСЂРєР° Р±РµР·РѕРїР°СЃРЅРѕСЃС‚Рё РёР»Рё С‚СЂРµР±СѓРµС‚СЃСЏ РІР°С€Рµ РІРЅРёРјР°РЅРёРµ.<br><br>
+1. @BotFather в†’ СЃРѕР·РґР°Р№С‚Рµ Р±РѕС‚Р° в†’ РїРѕР»СѓС‡РёС‚Рµ token<br>
+2. РќР°РїРёС€РёС‚Рµ СЃРІРѕРµРјСѓ Р±РѕС‚Сѓ Р»СЋР±РѕРµ СЃРѕРѕР±С‰РµРЅРёРµ<br>
+3. @userinfobot в†’ СѓР·РЅР°Р№С‚Рµ СЃРІРѕР№ chat_id<br>
+4. Р’СЃС‚Р°РІСЊС‚Рµ РѕР±Р° Р·РЅР°С‡РµРЅРёСЏ Рё СЃРѕС…СЂР°РЅРёС‚Рµ.`],
+  reset: ['рџ§№ РћР±РЅСѓР»РёС‚СЊ СЃС‚Р°С‚РёСЃС‚РёРєСѓ', `РЈРґР°Р»РёС‚ РёСЃС‚РѕСЂРёСЋ Р·Р°СЏРІРѕРє Рё СЃС‡С‘С‚С‡РёРєРё (СЃРµРіРѕРґРЅСЏ / 7 РґРЅРµР№ / РІСЃРµРіРѕ).<br><br>
+Р–СѓСЂРЅР°Р» СЃРѕР±С‹С‚РёР№ Рё РЅР°СЃС‚СЂРѕР№РєРё РѕСЃС‚Р°РЅСѓС‚СЃСЏ. РџРѕР»РµР·РЅРѕ, РµСЃР»Рё РІ СЃС‚Р°С‚РёСЃС‚РёРєРµ РЅР°РєРѕРїРёР»РёСЃСЊ С‚РµСЃС‚РѕРІС‹Рµ Р·Р°РїСѓСЃРєРё.`],
 };
 function openHelp(k) {
   const h = HELP[k];
@@ -416,34 +413,33 @@ $$('.tab').forEach((b) => {
 
 $('#btnStart').addEventListener('click', () => control('start'));
 $('#btnStop').addEventListener('click', () => control('stop'));
-$('#btnPause').addEventListener('click', () => control(snap && snap.paused ? 'resume' : 'pause'));
 $('#btnLogout').addEventListener('click', () => { location.href = '/logout'; });
 
 $('#btnAiRun').addEventListener('click', () => runTask('textarea[name=aiInstruction]', '#btnAiRun'));
 
 $('#btnAiTest').addEventListener('click', async () => {
   const out = $('#aiTestOut');
-  out.textContent = '⏳ Проверяю ключ…';
+  out.textContent = 'вЏі РџСЂРѕРІРµСЂСЏСЋ РєР»СЋС‡вЂ¦';
   try {
     const r = await api('/api/ai/test', { method: 'POST' });
     out.innerHTML = r.ok
-      ? `✅ Ключ работает · моделей: ${r.models}<br>Модель <b>${esc(r.model)}</b>: ${r.modelFound ? 'доступна' : 'не найдена в списке'}<br><span style="opacity:.65">${esc(r.base || '')}</span>`
-      : '❌ ' + esc(r.reason || 'Ключ не подошёл');
-  } catch (e) { out.textContent = 'Ошибка: ' + e.message; }
+      ? `вњ… РљР»СЋС‡ СЂР°Р±РѕС‚Р°РµС‚ В· РјРѕРґРµР»РµР№: ${r.models}<br>РњРѕРґРµР»СЊ <b>${esc(r.model)}</b>: ${r.modelFound ? 'РґРѕСЃС‚СѓРїРЅР°' : 'РЅРµ РЅР°Р№РґРµРЅР° РІ СЃРїРёСЃРєРµ'}<br><span style="opacity:.65">${esc(r.base || '')}</span>`
+      : 'вќЊ ' + esc(r.reason || 'РљР»СЋС‡ РЅРµ РїРѕРґРѕС€С‘Р»');
+  } catch (e) { out.textContent = 'РћС€РёР±РєР°: ' + e.message; }
 });
 
 $('#btnStatsReset').addEventListener('click', async () => {
-  if (!confirm('Обнулить статистику заявок?')) return;
+  if (!confirm('РћР±РЅСѓР»РёС‚СЊ СЃС‚Р°С‚РёСЃС‚РёРєСѓ Р·Р°СЏРІРѕРє?')) return;
   try {
     await api('/api/stats/reset', { method: 'POST' });
-    toast('🧹 Статистика обнулена');
+    toast('рџ§№ РЎС‚Р°С‚РёСЃС‚РёРєР° РѕР±РЅСѓР»РµРЅР°');
     loadStats().catch(() => {});
     pullStatus();
-  } catch (e) { toast('Ошибка: ' + e.message); }
+  } catch (e) { toast('РћС€РёР±РєР°: ' + e.message); }
 });
 
 const sp = $('#speedRange');
-if (sp) sp.addEventListener('input', (e) => { $('#speedVal').textContent = '×' + e.target.value; });
+if (sp) sp.addEventListener('input', (e) => { $('#speedVal').textContent = 'Г—' + e.target.value; });
 
 $$('#journalChips .chip').forEach((c) => {
   c.addEventListener('click', () => {
@@ -468,3 +464,5 @@ loadSettings(true).catch(() => {});
 refreshAgent();
 setInterval(pullStatus, 12000);
 setInterval(() => { if (!document.hidden) loadStats().catch(() => {}); }, 60000);
+
+
