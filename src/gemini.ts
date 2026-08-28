@@ -267,6 +267,41 @@ export async function testKey(opts: {
   }
 }
 
+/** Список доступных моделей для ключа. */
+export async function listModels(opts: {
+  key: string;
+  baseUrl?: string;
+}): Promise<{ ok: boolean; models?: string[]; reason?: string; base: string }> {
+  const base = normalizeBase(opts.baseUrl);
+  try {
+    const url = isGeminiApi(base)
+      ? `${base}/models?key=${encodeURIComponent(opts.key)}`
+      : `${base}/models`;
+    const r = await fetch(url, {
+      headers: isGeminiApi(base) ? {} : { authorization: `Bearer ${opts.key}` },
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!r.ok) {
+      return {
+        ok: false,
+        reason: `Сервер ответил ${r.status}`,
+        base,
+      };
+    }
+    const j = (await r.json()) as { models?: { name?: string }[]; data?: { id?: string }[] };
+    const names = (j.models ?? [])
+      .map((m) => String(m.name).replace(/^models\//, ''))
+      .concat((j.data ?? []).map((m) => String(m.id)));
+    return {
+      ok: true,
+      models: names,
+      base,
+    };
+  } catch (e) {
+    return { ok: false, reason: String(e).slice(0, 140), base };
+  }
+}
+
 export interface AgentSessionResult {
   steps: number;
   done: boolean;

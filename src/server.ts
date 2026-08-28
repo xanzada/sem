@@ -466,6 +466,16 @@ export async function buildServer(engine: Engine): Promise<void> {
     });
   });
 
+  app.get('/api/models', async () => {
+    const s = getAllSettings();
+    if (!s.aiApiKey) return { ok: false, reason: 'Ключ не задан', models: [] };
+    const { listModels } = await import('./gemini.js');
+    return listModels({
+      key: String(s.aiApiKey),
+      baseUrl: String(s.aiBaseUrl || ''),
+    });
+  });
+
   app.post('/api/control', async (req, reply) => {
     const { cmd } = ((req.body ?? {}) as { cmd?: string }) ?? {};
     switch (cmd) {

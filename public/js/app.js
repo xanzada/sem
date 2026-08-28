@@ -188,6 +188,31 @@ async function loadSettings(force) {
     if (lf) lf.style.display = on ? '' : 'none';
   }
 
+  // Загружаем список моделей, если есть ключ
+  if (s.aiApiKeySet) {
+    try {
+      const r = await api('/api/models');
+      if (r.ok && r.models) {
+        const datalist = document.getElementById('modelList');
+        if (datalist) {
+          // Сохраняем текущее значение
+          const current = document.querySelector('input[name=aiModel]')?.value || '';
+          datalist.innerHTML = '';
+          // Показываем только модели с generateContent (фильтруем на сервере)
+          r.models.forEach((m) => {
+            const opt = document.createElement('option');
+            opt.value = m;
+            datalist.appendChild(opt);
+          });
+          // Восстанавливаем значение, если оно было
+          const modelInput = document.querySelector('input[name=aiModel]');
+          if (modelInput && current) modelInput.value = current;
+        }
+      }
+    } catch (e) {
+      // Тихая ошибка — список не обязателен
+    }
+  }
 }
 
 let vncLoaded = false;
