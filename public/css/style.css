@@ -87,10 +87,11 @@ main { padding: 16px; margin: 0 auto; max-width: 800px; padding-bottom: 90px; }
 .kpi-lbl { font-size: 11px; font-weight: 500; color: var(--dim); text-transform: uppercase; letter-spacing: 0.05em; }
 
 /* ---------- forms ---------- */
-.form-group { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
-.form-group:first-child { margin-top: 0; }
-.lbl { font-size: 13px; font-weight: 600; color: #d4d4d8; display: flex; align-items: center; justify-content: space-between; }
-.inp, .area, .sel {
+.field, .field-2 { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+.field-2 { flex-direction: row; gap: 12px; }
+.field:first-child, .field-2:first-child { margin-top: 0; }
+.field label { font-size: 13px; font-weight: 600; color: #d4d4d8; display: flex; align-items: center; justify-content: space-between; }
+input[type="text"], input[type="url"], input[type="password"], input[type="number"], textarea, select {
   width: 100%;
   background: rgba(0,0,0,0.2);
   border: 1px solid var(--line);
@@ -100,11 +101,17 @@ main { padding: 16px; margin: 0 auto; max-width: 800px; padding-bottom: 90px; }
   font-family: inherit; font-size: 14px;
   transition: all 0.2s;
 }
-.inp:focus, .area:focus, .sel:focus {
+input[type="text"]:focus, input[type="url"]:focus, input[type="password"]:focus, input[type="number"]:focus, textarea:focus, select:focus {
   outline: none; border-color: var(--acc);
   box-shadow: 0 0 0 3px var(--acc-glow);
 }
-.area { resize: vertical; min-height: 90px; line-height: 1.6; }
+textarea { resize: vertical; min-height: 90px; line-height: 1.6; }
+
+/* Also style the range input nicely */
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--acc);
+}
 
 /* ---------- buttons ---------- */
 .btn {
@@ -248,4 +255,8 @@ input:checked + .slider:before { transform: translateX(20px); }
   .btn { padding: 12px 14px; font-size: 13px; }
   .kpi-lbl { font-size: 9.5px; }
 }
+
+
+.chart-box { height: 210px; margin-top: 16px; }
+.field-2 > .field { flex: 1; margin-top: 0; }
 
