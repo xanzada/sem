@@ -14,6 +14,9 @@ let snap = null;
 let chart = null;
 let ws = null, wsTimer = null;
 let journalCat = '';
+/* Агенттің нақты күйі: сервер оны /api/ai/state және ws «agent» арқылы береді.
+ * СТАРТ/СТОП батырмалары engine.running-ке емес, осыған қарайды. */
+let agentBusy = false;
 
 /* ---------------- utils ---------------- */
 function toast(t, ms = 2600) {
@@ -67,19 +70,24 @@ function renderStatus() {
   setText('#kToday', snap.processedToday);
   setText('#kUp', live ? dur(snap.uptimeSec) : '—');
 
-  if ($('#btnAiRun')) {
-    const r = snap.running;
-    $('#btnAiRun').disabled = r;
-    $('#btnAiRun').style.opacity = r ? '0.3' : '1';
-    $('#btnAiRun').classList.toggle('active-glow', !r);
-    
-    $('#btnAiStop').disabled = !r;
-    $('#btnAiStop').style.opacity = !r ? '0.3' : '1';
-    $('#btnAiStop').classList.toggle('active-glow', r);
-  }
+  syncRunButtons();
 
   const alert = ['AUTH_REQUIRED', 'MANUAL_REVIEW', 'ERROR'].includes(snap.state);
   $$('.tab[data-tab="vnc"]').forEach((b) => b.classList.toggle('alert', alert));
+}
+
+/* СТАРТ пен СТОП екеуі де әрқашан басылады: СТОП — агентті де, циклді де
+ * тоқтатады, сондықтан «Агент работает» деген күйде қатып қалу мүмкін емес. */
+function syncRunButtons() {
+  const run = $('#btnAiRun');
+  const stop = $('#btnAiStop');
+  if (!run || !stop) return;
+  const busy = agentBusy || Boolean(snap && snap.running);
+  run.disabled = busy;
+  run.classList.toggle('active-glow', !busy);
+  run.textContent = busy ? '⏳ Работает…' : '▶ СТАРТ';
+  stop.disabled = false;
+  stop.classList.toggle('active-glow', busy);
 }
 
 /* ---------------- feed ---------------- */
@@ -351,6 +359,8 @@ function pullStatus() {
 
 /* ---------------- AI agent ---------------- */
 function renderAgent(st) {
+  agentBusy = Boolean(st && st.running);
+  syncRunButtons();
   const html = (!st || (!st.running && !st.lastAction)) ? '' : `
     <div class="ai-live-head">${st.running ? '<span class="ai-dot"></span> Агент работает' : '⏹ Остановлен'}
       ${st.step ? `<span class="ai-step">шаг ${st.step}</span>` : ''}</div>
@@ -361,7 +371,20 @@ function renderAgent(st) {
 async function refreshAgent() {
   try { renderAgent(await api('/api/ai/state')); } catch { /* ignore */ }
 }
-async function runTask(inputSel, btnSel) {
+
+/** СТОП: агентті де, тұрақты циклді де бірден тоқтатады. */
+async function stopEverything() {
+  agentBusy = false;
+  syncRunButtons();
+  try {
+    await api('/api/ai/stop', { method: 'POST' });
+  } catch { /* агент жүрмеген болуы мүмкін */ }
+  await control('stop');
+  toast('⏹ Остановлено');
+  refreshAgent();
+}
+
+async function runTask(inputSel) {
   const field = document.querySelector(inputSel);
   const task = (field?.value || '').trim();
   if (!task) { toast('Напишите задачу'); return; }
@@ -371,20 +394,22 @@ async function runTask(inputSel, btnSel) {
       body: JSON.stringify({ aiInstruction: task }),
     });
   } catch { /* сохраним при следующем Save */ }
-  const btn = $(btnSel);
-  const old = btn.textContent;
-  btn.disabled = true; btn.textContent = '⏳ Агент работает…';
+  agentBusy = true;
+  syncRunButtons();
   try {
     const r = await api('/api/ai/run', {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ task }),
     });
     if (!r.ok) toast('❌ ' + (r.reason || 'Ошибка'));
+    else if (r.aborted) toast('⏹ Остановлено');
     else if (r.done) toast(`✅ Готово за ${r.steps} шаг(ов)`);
     else toast('⚠️ ' + (r.reason || 'Не завершено'));
   } catch (e) { toast('Ошибка: ' + e.message); }
-  btn.disabled = false; btn.textContent = old;
-  refreshAgent(); loadStats().catch(() => {}); }
+  agentBusy = false;
+  syncRunButtons();
+  refreshAgent(); loadStats().catch(() => {});
+}
 
 /* ---------------- help ---------------- */
 const HELP = {
@@ -469,19 +494,26 @@ $$('.tab').forEach((b) => {
   });
 });
 
-  $('#btnAiStop').addEventListener('click', () => control('stop'));
-  $('#btnLogout').addEventListener('click', () => { location.href = '/logout'; });
+$('#btnAiStop').addEventListener('click', () => { stopEverything().catch(() => {}); });
+$('#btnLogout').addEventListener('click', () => { location.href = '/logout'; });
 
-$('#btnAiRun').addEventListener('click', () => runTask('textarea[name=aiInstruction]', '#btnAiRun'));
+$('#btnAiRun').addEventListener('click', () => runTask('textarea[name=aiInstruction]'));
 
 $('#btnAiTest').addEventListener('click', async () => {
   const out = $('#aiTestOut');
-  out.textContent = '⏳ Проверяю ключ…';
+  out.textContent = '⏳ Проверяю ключ и квоту…';
   try {
     const r = await api('/api/ai/test', { method: 'POST' });
-    out.innerHTML = r.ok
-      ? `✅ Ключ работает · моделей: ${r.models}<br>Модель <b>${esc(r.model)}</b>: ${r.modelFound ? 'доступна' : 'не найдена в списке'}<br><span style="opacity:.65">${esc(r.base || '')}</span>`
-      : '❌ ' + esc(r.reason || 'Ключ не подошёл');
+    if (!r.ok) { out.innerHTML = '❌ ' + esc(r.reason || 'Ключ не подошёл'); return; }
+    /* Ключ может быть верным, но дневная квота — исчерпана. Это разные вещи,
+     * и раньше панель показывала «работает», а агент падал с 429. */
+    const quota = r.quotaOk === false
+      ? `<br>⛔ <b>${esc(r.quotaNote || 'квота исчерпана')}</b>`
+      : r.quotaOk === true ? '<br>✅ ' + esc(r.quotaNote || '') : '';
+    out.innerHTML =
+      `✅ Ключ работает · моделей: ${r.models}<br>Модель <b>${esc(r.model)}</b>: ${r.modelFound ? 'доступна' : 'не найдена в списке'}`
+      + quota
+      + `<br><span style="opacity:.65">${esc(r.base || '')}</span>`;
   } catch (e) { out.textContent = 'Ошибка: ' + e.message; }
 });
 
@@ -520,4 +552,6 @@ loadStats().catch(() => {});
 loadSettings(true).catch(() => {});
 refreshAgent();
 setInterval(pullStatus, 12000);
+/* Агент күйін жиі сұраймыз: батырмалар нақты күйден кейін қалып қалмауы керек. */
+setInterval(() => { if (!document.hidden) refreshAgent(); }, 4000);
 setInterval(() => { if (!document.hidden) loadStats().catch(() => {}); }, 60000);

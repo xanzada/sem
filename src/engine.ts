@@ -200,6 +200,9 @@ export class Engine {
   stop(): void {
     this.stopRequested = true;
     this.running = false;
+    /* Агент может стоять в середине долгого HTTP-запроса к модели: без этого
+     * флага «Остановлен» в панели соседствует с «Агент работает». */
+    void import('./agent.js').then((m) => m.stopAiTask()).catch(() => {});
     log('info', 'CONTROL', 'SEM остановлен оператором (браузер и сессия сохранены)');
     this.setState(WState.STOPPED, '');
   }
@@ -207,6 +210,7 @@ export class Engine {
   pause(): void {
     if (!this.running || this.paused) return;
     this.paused = true;
+    void import('./agent.js').then((m) => m.stopAiTask()).catch(() => {});
     log('info', 'CONTROL', 'Пауза по команде оператора');
     this.setState(WState.WAITING, 'Пауза');
   }

@@ -451,6 +451,62 @@ export async function buildServer(engine: Engine): Promise<void> {
     return runAiTask(String(task ?? ''), Math.min(40, Math.max(1, Number(maxSteps ?? 25))));
   });
 
+  /* Отдельная кнопка «стоп» для агента: она не должна ждать окончания
+   * текущего шага — просто поднимает флаг, цикл проверяет его между шагами. */
+  app.post('/api/ai/stop', async () => {
+    const { stopAiTask } = await import('./agent.js');
+    return stopAiTask();
+  });
+
+  /* Инструменты агента без модели: видно, что именно бот «видит» на странице,
+   * и можно проверить клик/ввод, не тратя квоту API. */
+  app.get('/api/tools/inspect', async () => {
+    const page = await getPage();
+    const { collectDom } = await import('./dom.js');
+    const els = await collectDom(page);
+    const vp = page.viewportSize() ?? { width: 0, height: 0 };
+    return { url: page.url(), title: await page.title().catch(() => ''), viewport: vp, count: els.length, elements: els };
+  });
+
+  app.post('/api/tools/act', async (req) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const page = await getPage();
+    const { collectDom } = await import('./dom.js');
+    const { perform } = await import('./gemini.js');
+    const els = await collectDom(page);
+    const vp = page.viewportSize() ?? { width: 1280, height: 760 };
+    const before = page.url();
+    const action = {
+      act: String(body.act ?? 'click'),
+      ref: body.ref == null ? undefined : Number(body.ref),
+      x: body.x == null ? undefined : Number(body.x),
+      y: body.y == null ? undefined : Number(body.y),
+      dy: body.dy == null ? undefined : Number(body.dy),
+      sec: body.sec == null ? undefined : Number(body.sec),
+      text: body.text == null ? undefined : String(body.text),
+      key: body.key == null ? undefined : String(body.key),
+      url: body.url == null ? undefined : String(body.url),
+    } as Parameters<typeof perform>[1];
+    const started = Date.now();
+    const out = await perform(
+      page,
+      action,
+      els,
+      vp,
+      async (ms: number) => {
+        await page.waitForTimeout(ms);
+      },
+      Math.min(3000, Number(body.delayMs ?? 700))
+    );
+    return {
+      ...out,
+      elapsedMs: Date.now() - started,
+      urlBefore: before,
+      urlAfter: page.url(),
+      elementCount: els.length,
+    };
+  });
+
   app.post('/api/ai/test', async () => {
     const s = getAllSettings();
     if (!s.aiApiKey) return { ok: false, reason: 'Ключ не задан', model: String(s.aiModel) };
