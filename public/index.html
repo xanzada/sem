@@ -3,8 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<meta name="theme-color" content="#0b0f14">
+<meta name="theme-color" content="#0a0e14">
 <title>SEM — оператор заявок</title>
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icon.svg">
@@ -12,7 +11,6 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="/css/style.css">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -39,7 +37,6 @@
           <div class="status-sub" id="stateSub">—</div>
         </div>
       </div>
-
     </div>
 
     <div class="kpi-grid">
@@ -64,9 +61,9 @@
       </div>
 
       <div class="btn-col">
-        <div style="display:flex; gap: 8px;">
-          <button type="button" class="btn primary block" id="btnAiRun" style="flex:1;">▶ СТАРТ</button>
-          <button type="button" class="btn danger block" id="btnAiStop" style="flex:1;">⏹ СТОП</button>
+        <div class="btn-row">
+          <button type="button" class="btn primary" id="btnAiRun">▶ СТАРТ</button>
+          <button type="button" class="btn danger" id="btnAiStop">⏹ СТОП</button>
         </div>
         <button type="submit" class="btn ghost block">💾 Сохранить задачу</button>
       </div>
@@ -100,7 +97,7 @@
     </div>
 
     <div class="card">
-      <div class="card-head"><h2>Обслуживание</h2><span class="qmark" data-help="reset">?</span></div>
+      <div class="card-head"><h2>🧹 Обслуживание</h2><span class="qmark" data-help="reset">?</span></div>
       <p class="hint">Все данные хранятся на вашем сервере и не теряются при перезапуске. Если в статистике остались тестовые заявки — обнулите счётчики.</p>
       <button class="btn danger block" id="btnStatsReset">Обнулить статистику</button>
     </div>
@@ -109,51 +106,61 @@
   <!-- ======================= НАСТРОЙКИ ======================= -->
   <section class="page" data-tab="settings">
 
-    <!-- 2. Ключ -->
+    <!-- Ключ и модель -->
     <form class="card" data-save>
       <div class="card-head"><h2>🔑 Доступ к модели</h2><span class="qmark" data-help="aikey">?</span></div>
+
+      <div class="field">
+        <label>Провайдер</label>
+        <div class="seg prov" id="provSeg">
+          <button type="button" class="seg-btn" data-base="" data-model="gemini-flash-latest">
+            <b>Gemini</b><small>Google AI Studio</small>
+          </button>
+          <button type="button" class="seg-btn" data-base="https://api.openai.com/v1" data-model="gpt-4o">
+            <b>OpenAI</b><small>api.openai.com</small>
+          </button>
+          <button type="button" class="seg-btn" data-base="https://openrouter.ai/api/v1" data-model="google/gemini-2.5-flash">
+            <b>OpenRouter</b><small>десятки моделей</small>
+          </button>
+          <button type="button" class="seg-btn" data-base="custom">
+            <b>Свой</b><small>прокси или локально</small>
+          </button>
+        </div>
+      </div>
+
       <div class="field">
         <label>API-ключ <span class="key-state" id="keyState"></span></label>
         <input type="text" name="aiApiKey" class="mono" placeholder="AIza… или sk-…" autocomplete="off" spellcheck="false">
       </div>
+
       <div class="field">
         <label>Модель (пишите точное название)</label>
         <input type="text" name="aiModel" class="mono" list="modelList" placeholder="gemini-flash-latest" autocomplete="off" spellcheck="false">
         <datalist id="modelList">
           <option value="gemini-flash-latest"></option>
-          <option value="gemini-3.5-flash"></option>
-          <option value="gemini-3.1-flash-lite"></option>
-          <option value="gemini-3-flash-preview"></option>
           <option value="gemini-2.5-pro"></option>
           <option value="google/gemini-2.5-flash"></option>
           <option value="anthropic/claude-sonnet-4.5"></option>
           <option value="openai/gpt-4o"></option>
         </datalist>
       </div>
-      <div class="field">
-        <label>Провайдер</label>
-        <div class="seg" id="provSeg">
-          <button type="button" class="seg-btn" data-base="" data-model="gemini-flash-latest">Gemini</button>
-          <button type="button" class="seg-btn" data-base="https://api.openai.com/v1" data-model="gpt-4o">OpenAI</button>
-          <button type="button" class="seg-btn" data-base="https://openrouter.ai/api/v1" data-model="google/gemini-2.5-flash">OpenRouter</button>
-          <button type="button" class="seg-btn" data-base="custom">Свой</button>
-        </div>
-      </div>
+
       <div class="field">
         <label>Base URL (пусто = Google Gemini)</label>
         <input type="text" name="aiBaseUrl" class="mono" placeholder="https://openrouter.ai/api/v1" autocomplete="off" spellcheck="false">
       </div>
+
       <div class="btn-col">
         <button type="submit" class="btn primary block">Сохранить</button>
         <button type="button" class="btn ghost block" id="btnAiTest">Проверить ключ</button>
       </div>
-      <div id="aiTestOut" class="hint mt"></div>
+      <div id="aiTestOut" class="hint"></div>
     </form>
 
-    <!-- 3. Автозапуск -->
+    <!-- Автозапуск -->
     <form class="card" data-save>
       <div class="card-head"><h2>♻️ Автозапуск</h2><span class="qmark" data-help="loop">?</span></div>
-      <div class="switch-row" style="border-top:none">
+      <div class="switch-row first">
         <span class="switch-label">Запускать агента при старте сервера</span>
         <label class="switch"><input type="checkbox" name="autostart"><span class="slider"></span></label>
       </div>
@@ -171,7 +178,7 @@
       <button type="submit" class="btn primary block">Сохранить</button>
     </form>
 
-    <!-- 4. Сайт -->
+    <!-- Сайт -->
     <form class="card" data-save>
       <div class="card-head"><h2>🌐 Сайт и вход</h2><span class="qmark" data-help="site">?</span></div>
       <div class="field"><label>Адрес сайта</label><input type="url" name="siteUrl" placeholder="https://example.kz"></div>
@@ -184,7 +191,7 @@
       <button type="submit" class="btn primary block">Сохранить</button>
     </form>
 
-    <!-- 5. Расписание -->
+    <!-- Расписание -->
     <form class="card" data-save>
       <div class="card-head"><h2>🕒 График работы</h2><span class="qmark" data-help="schedule">?</span></div>
       <div class="field">
@@ -201,7 +208,7 @@
       <button type="submit" class="btn primary block">Сохранить</button>
     </form>
 
-    <!-- 6. Поведение -->
+    <!-- Поведение -->
     <form class="card" data-save>
       <div class="card-head"><h2>⚙️ Поведение</h2><span class="qmark" data-help="behavior">?</span></div>
       <div class="field">
@@ -220,7 +227,7 @@
       <button type="submit" class="btn primary block">Сохранить</button>
     </form>
 
-    <!-- 7. Telegram -->
+    <!-- Telegram -->
     <form class="card" data-save>
       <div class="card-head"><h2>📨 Уведомления</h2><span class="qmark" data-help="telegram">?</span></div>
       <div class="field"><label>Telegram bot token <span class="key-state" data-state-for="telegramToken"></span></label><input type="password" name="telegramToken" placeholder="••••••••" autocomplete="new-password"></div>
@@ -243,7 +250,7 @@
 
   <!-- ======================= VNC ======================= -->
   <section class="page" data-tab="vnc">
-    <div class="card vnc-card full" id="vncWrap"></div>
+    <div class="card vnc-card" id="vncWrap"></div>
   </section>
 </main>
 
@@ -264,6 +271,6 @@
   </div>
 </div>
 
-<script src="/js/app.js"></script>
+<script src="/js/app.js" defer></script>
 </body>
 </html>

@@ -111,6 +111,22 @@ async function loadJournal() {
 }
 
 /* ---------------- analytics ---------------- */
+/* Chart.js әдейі кейін жүктеледі: бастапқы бет жеңіл болады. */
+let chartLibPromise = null;
+function loadChartLib() {
+  if (window.Chart) return Promise.resolve(window.Chart);
+  if (chartLibPromise) return chartLibPromise;
+  chartLibPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
+    s.async = true;
+    s.onload = () => resolve(window.Chart);
+    s.onerror = () => { chartLibPromise = null; reject(new Error('chart.js')); };
+    document.head.appendChild(s);
+  });
+  return chartLibPromise;
+}
+
 async function loadStats() {
   const a = await api('/api/analytics');
   $('#stToday').textContent = a.today;
@@ -135,12 +151,20 @@ async function loadStats() {
   const data = a.series24h.map((p) => p.count);
   const sig = labels.join(',') + '|' + data.join(',');
   if (chart && chart.__sig === sig) return;
+
+  /* Диаграмма — тек «Статистика» көрініп тұрғанда салынады. */
+  const box = $('#chart24');
+  if (!box || !box.offsetParent) return;
+
+  let Lib;
+  try { Lib = await loadChartLib(); } catch { return; }
   if (chart) chart.destroy();
-  chart = new Chart($('#chart24').getContext('2d'), {
+  chart = new Lib(box.getContext('2d'), {
     type: 'bar',
     data: { labels, datasets: [{ data, backgroundColor: 'rgba(79,140,255,.55)', borderRadius: 6, maxBarThickness: 22 }] },
     options: {
       responsive: true, maintainAspectRatio: false,
+      animation: false,
       plugins: { legend: { display: false } },
       scales: {
         x: { ticks: { color: '#8794a5', font: { size: 9 } }, grid: { display: false } },
