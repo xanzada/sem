@@ -14,6 +14,8 @@ Frontend: vanilla JS/CSS (public/), Chart.js CDN.
 
 ## Ережелер
 - Пароль/telegram token чатқа, git-ке, log-қа кірмейді. UI `__SAVED__` placeholder қолданады.
+- **CSS**: `public/css/style.css` — жалғыз spacing шкаласы `--s1..--s4` және жалғыз `.card > * + *` ережесі. Файл соңына қосымша блок жазуға болмайды (бұрын солай істелген еді, `--acc` айнымалысы жоқ болғандықтан ережелер үнсіз бұзылған). Түстер: `--acc`, `--acc-soft`, `--acc-line`, `--acc-glow`.
+- **Frontend жылдамдығы**: index.html-де сыртқы blocking `<link>`/`<script>` жоқ. Chart.js тек «Статистика» ашылғанда `loadChartLib()` арқылы жүктеледі; шрифт — жүйелік stack.
 - Security challenge ешқашан обход жасалмайды: тек WAIT → DETECT → REVALIDATE → RESUME.
 - Critical әрекет алдынынан ledger intent жазылады; resume кезінде reconcile міндетті (duplicate protection).
 - Reload тек UNEXPECTED recovery-де ғана; SECURITY_WAIT ішінде reload/pagination жоқ.
