@@ -1,96 +1,62 @@
 import type { Page } from 'playwright';
 import { WState, STATE_META } from './states.js';
-import { getAllSettings, getSetting } from './settings.js';
-import { classifyPage, type Classification } from './classifier.js';
-import { getPage, closeBrowser, screenshot, backupSession } from './browser.js';
-import { TZ } from './config.js';
+import { getAllSettings } from './settings.js';
+import { getPage, closeBrowser, screenshot } from './browser.js';
+import { TZ, VERSION, NOVNC_PUBLIC_URL } from './config.js';
 import { log } from './logger.js';
 import { bus } from './bus.js';
 import { tgNotify } from './telegram.js';
-import {
-  beginIntent,
-  confirmIntent,
-  failIntent,
-  pendingIntentsForApp,
-} from './ledger.js';
-import { recordApplication, countToday } from './analytics.js';
-import {
-  saveCheckpoint,
-  latestCheckpoint,
-  resolveCheckpointsForApp,
-} from './checkpoint.js';
-import { createDemoDriver, LiveHttpDriver, parseSteps, StepsDriver, AiLoopDriver, SelectorBrokenError } from './workflow.js';
-import {
-  MissingSelectorsError,
-  SimulatedIncident,
-  type DriverCtx,
-  type Snapshot,
-  type WorkflowDriver,
-} from './types.js';
-import { sleep, jittered, nowIso } from './util.js';
-import { NOVNC_PUBLIC_URL, VERSION } from './config.js';
+import { recordCatch, countToday } from './analytics.js';
+import { activeRule, markRuleResult, type Rule } from './rules.js';
+import { ensureWatcher, stopWatcher, takeHits } from './watcher.js';
+import { sleep, nowIso } from './util.js';
 
-type ClassifierFn = () => Promise<Classification>;
+export interface Snapshot {
+  state: string;
+  stateRu: string;
+  emoji: string;
+  since: string;
+  step: string;
+  running: boolean;
+  uptimeSec: number;
+  caughtToday: number;
+  /** Белсенді ереже туралы қысқа мәлімет. */
+  ruleName: string;
+  ruleWatch: string;
+  /** Күзетші бетті қанша рет тексерді. */
+  scans: number;
+  /** Бақыланатын беттің адресі. */
+  watchUrl: string;
+  vncUrl: string;
+  version: string;
+}
 
+/**
+ * Күзет қозғалтқышы.
+ *
+ * Негізгі принцип: шешім де, клик те бет ішінде жасалады (src/watcher.ts).
+ * Node тек үш нәрсеге жауапты:
+ *   1) күзетші тірі ме — жоқ болса қайта енгізу (навигациядан кейін);
+ *   2) сессия үзілмеуі үшін тінтуірді қозғау — бет ЖАҢАРТЫЛМАЙДЫ;
+ *   3) нәтижелерді журнал мен статистикаға жазу.
+ *
+ * Бет ешқашан reload/goto жасалмайды: сайт wizard-пен жүреді, қайта жүктеу
+ * барлық толтырылған қадамды нөлге қайтарады. Операторды бет ашық қалдырады.
+ */
 export class Engine {
   state: WState = WState.STOPPED;
   since = nowIso();
   step = '';
-  currentAppId: string | null = null;
-  paused = false;
   running = false;
 
   private startedAt = Date.now();
   private stopRequested = false;
-  private driver: WorkflowDriver | null = null;
-  private lastActivity = Date.now();
-  private lastKeepalive = Date.now();
-  private demoSeqRestored = 0;
-  private sessionBackupTimer: NodeJS.Timeout | null = null;
-  private authAlerted = false;
+  private rule: Rule | null = null;
+  private scans = 0;
+  private watchUrl = '';
+  private lastMouseMove = 0;
   private pausedBySchedule = false;
-
-  private hourNow(): number {
-    try {
-      return Number(
-        new Intl.DateTimeFormat('en-GB', {
-          hour: '2-digit',
-          hour12: false,
-          timeZone: TZ,
-        }).format(new Date())
-      );
-    } catch {
-      return new Date().getHours();
-    }
-  }
-
-  private checkSchedule(): void {
-    const s = getAllSettings();
-    const inside = (() => {
-      if (!s.scheduleEnabled) return true;
-      const from = Number(s.scheduleFrom) || 0;
-      const to = Number(s.scheduleTo) || 24;
-      const h = this.hourNow();
-      return from <= to ? h >= from && h < to : h >= from || h < to;
-    })();
-
-    if (!inside && this.running && !this.paused) {
-      this.paused = true;
-      this.pausedBySchedule = true;
-      log(
-        'info',
-        'CONTROL',
-        `Внерабочее время (сейчас ${this.hourNow()} ч) — автопауза. Браузер закрывается для экономии ресурсов.`
-      );
-      this.setState(WState.WAITING, 'Внерабочее время — автопауза');
-      void closeBrowser();
-    } else if (inside && this.paused && this.pausedBySchedule) {
-      this.pausedBySchedule = false;
-      this.paused = false;
-      log('info', 'CONTROL', 'Рабочее время наступило — автоматическое возобновление работы.');
-      this.setState(WState.RUNNING, 'Работа');
-    }
-  }
+  private loopHandle: Promise<void> | null = null;
 
   snapshot(): Snapshot {
     const meta = STATE_META[this.state];
@@ -99,141 +65,264 @@ export class Engine {
       stateRu: meta.ru,
       emoji: meta.emoji,
       since: this.since,
-      currentAppId: this.currentAppId,
       step: this.step,
-      paused: this.paused,
       running: this.running,
-      uptimeSec: Math.floor((Date.now() - this.startedAt) / 1000),
-      processedToday: countToday(),
-      mode: String(getSetting('mode')),
-      speed: Number(getSetting('speed')) || 1,
+      uptimeSec: this.running ? Math.floor((Date.now() - this.startedAt) / 1000) : 0,
+      caughtToday: countToday(),
+      ruleName: this.rule?.name ?? '',
+      ruleWatch: this.rule?.watchText ?? '',
+      scans: this.scans,
+      watchUrl: this.watchUrl,
       vncUrl: NOVNC_PUBLIC_URL,
       version: VERSION,
     };
   }
 
+  /** Ереже өзгерсе күзетшіні жаңа ережемен қайта енгізу керек. */
   applySettings(): void {
-    const s = getAllSettings();
-    this.driver = this.makeDriver(s.mode === 'simulation');
-    log('info', 'CONTROL', 'Настройки применены');
+    const fresh = activeRule();
+    const changed = JSON.stringify(fresh) !== JSON.stringify(this.rule);
+    this.rule = fresh;
+    if (this.running && changed) {
+      log('info', 'CONTROL', 'Правило изменилось — обновляю наблюдателя без перезагрузки страницы');
+      void this.reinstall();
+    }
     bus.emit('status', this.snapshot());
-  }
-
-  private makeDriver(simulation: boolean): WorkflowDriver {
-    const s = getAllSettings();
-    if (!simulation && s.mode === 'ai') return new AiLoopDriver();
-    if (!simulation && parseSteps().length > 0) return new StepsDriver();
-    return simulation ? createDemoDriver(this.demoSeqRestored) : new LiveHttpDriver();
   }
 
   async start(): Promise<void> {
     if (this.running) return;
-    this.stopRequested = false;
-    this.paused = false;
-    this.startedAt = Date.now();
-    const s = getAllSettings();
-    const simulation = s.mode === 'simulation';
-    const aiMode = s.mode === 'ai';
 
-    if (!simulation && aiMode) {
-      if (!String(s.aiApiKey || '')) {
-        this.setState(WState.ERROR, 'Не задан API-ключ модели (Настройки → Доступ к модели)');
-        log('error', 'CONTROL', 'Запуск невозможен: нет API-ключа модели');
-        return;
-      }
-      if (!String(s.aiInstruction || '').trim()) {
-        this.setState(WState.ERROR, 'Напишите задачу в «Команда агенту» и сохраните');
-        log('error', 'CONTROL', 'Запуск невозможен: задача агента не задана');
-        return;
-      }
-    } else if (!simulation && !s.siteUrl) {
-      this.setState(WState.ERROR, 'Не задан адрес сайта в настройках');
-      log('error', 'CONTROL', 'Запуск невозможен: не указан адрес сайта');
+    this.rule = activeRule();
+    if (!this.rule) {
+      this.setState(WState.ERROR, 'Правило не выучено');
+      log('error', 'CONTROL', 'Запуск невозможен: сначала обучите робота (кнопка «Обучить»)');
       return;
     }
-    if (!simulation && !aiMode && !(s.username && s.password)) {
-      log('warn', 'AUTH', 'Логин или пароль не заданы — при потере сессии потребуется оператор');
+
+    let page: Page;
+    try {
+      page = await getPage();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.setState(WState.ERROR, `Браузер недоступен: ${msg.slice(0, 90)}`);
+      log('error', 'SYSTEM', `Браузер не запустился: ${msg}`);
+      return;
     }
 
-    const cp = latestCheckpoint();
-    if (cp && cp.next_action !== 'done' && cp.application_id) {
+    const url = page.url();
+    if (!url || url === 'about:blank') {
+      this.setState(WState.ERROR, 'Страница не открыта');
       log(
-        'info',
-        'WORKFLOW',
-        `Восстановлен чекпоинт: заявка #${cp.application_id}, шаг «${cp.step ?? ''}» — продолжаю с безопасной точки`
+        'error',
+        'CONTROL',
+        'Запуск невозможен: откройте нужную страницу во вкладке «Экран» и доведите её до состояния ожидания'
       );
-      this.currentAppId = cp.application_id;
-      this.demoSeqRestored = Math.max(0, Number(cp.application_id) - 18490);
+      return;
     }
 
-    this.driver = this.makeDriver(simulation);
-    log(
-      'info',
-      'CONTROL',
-      simulation ? 'SEM запускается (демо-режим)' : 'SEM запускается (боевой режим)'
-    );
-    this.setState(WState.STARTING, simulation ? 'Инициализация' : 'Запуск браузера');
-
-    if (!simulation) {
-      try {
-        await getPage();
-        await backupSession();
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        this.setState(WState.ERROR, `Браузер не запустился: ${msg.slice(0, 100)}`);
-        log('error', 'SYSTEM', `Браузер не запустился: ${msg}`);
-        return;
-      }
-    }
-
+    this.stopRequested = false;
     this.running = true;
-    this.setState(WState.RUNNING, 'Работа');
-    if (!this.sessionBackupTimer) {
-      this.sessionBackupTimer = setInterval(() => {
-        void backupSession();
-      }, 10 * 60000);
-      this.sessionBackupTimer.unref?.();
+    this.startedAt = Date.now();
+    this.scans = 0;
+    this.watchUrl = url;
+    this.lastMouseMove = Date.now();
+
+    const s = getAllSettings();
+    const inst = await ensureWatcher(page, this.rule, s.scanIntervalMs, s.confirmDelayMs);
+    if (!inst.alive) {
+      this.running = false;
+      this.setState(WState.ERROR, 'Наблюдатель не встал на страницу');
+      log('error', 'SYSTEM', `Не удалось внедрить наблюдателя: ${inst.error ?? 'неизвестная ошибка'}`);
+      return;
     }
-    void this.loop();
+    log(
+      'success',
+      'CONTROL',
+      `👁 Наблюдение началось: жду «${this.rule.watchText}», проверка каждые ${s.scanIntervalMs} мс. Страница не перезагружается.`
+    );
+    this.setState(WState.RUNNING, `Жду «${this.rule.watchText}»`);
+    this.loopHandle = this.loop();
   }
 
   stop(): void {
+    if (!this.running) {
+      this.setState(WState.STOPPED, '');
+      return;
+    }
     this.stopRequested = true;
     this.running = false;
-    /* Агент может стоять в середине долгого HTTP-запроса к модели: без этого
-     * флага «Остановлен» в панели соседствует с «Агент работает». */
-    void import('./agent.js').then((m) => m.stopAiTask()).catch(() => {});
-    log('info', 'CONTROL', 'SEM остановлен оператором (браузер и сессия сохранены)');
+    void getPage()
+      .then((p) => stopWatcher(p))
+      .catch(() => {});
+    log('info', 'CONTROL', '⏹ Наблюдение остановлено оператором. Страница осталась как есть.');
     this.setState(WState.STOPPED, '');
   }
 
-  pause(): void {
-    if (!this.running || this.paused) return;
-    this.paused = true;
-    void import('./agent.js').then((m) => m.stopAiTask()).catch(() => {});
-    log('info', 'CONTROL', 'Пауза по команде оператора');
-    this.setState(WState.WAITING, 'Пауза');
-  }
-
-  resume(): void {
-    if (!this.paused) return;
-    this.paused = false;
-    this.pausedBySchedule = false;
-    log('info', 'CONTROL', 'Работа возобновлена');
-    this.setState(WState.RUNNING, 'Работа');
-  }
-
-  async testLogin(): Promise<boolean> {
+  private async reinstall(): Promise<void> {
+    if (!this.rule) return;
     const s = getAllSettings();
-    if (s.mode === 'simulation') {
-      log('info', 'AUTH', 'Демо-режим: тест входа имитируется успешно');
-      return true;
+    try {
+      const page = await getPage();
+      await ensureWatcher(page, this.rule, s.scanIntervalMs, s.confirmDelayMs);
+    } catch {
+      /* келесі циклде қайталанады */
     }
-    if (!s.siteUrl || !s.username || !s.password) {
-      log('warn', 'AUTH', 'Тест входа: заполните адрес сайта, логин и пароль');
-      return false;
+  }
+
+  private hourNow(): number {
+    try {
+      return Number(
+        new Intl.DateTimeFormat('en-GB', { hour: '2-digit', hour12: false, timeZone: TZ }).format(
+          new Date()
+        )
+      );
+    } catch {
+      return new Date().getHours();
     }
-    return await this.tryLogin(true);
+  }
+
+  private insideSchedule(): boolean {
+    const s = getAllSettings();
+    if (!s.scheduleEnabled) return true;
+    const from = Number(s.scheduleFrom) || 0;
+    const to = Number(s.scheduleTo) || 24;
+    const h = this.hourNow();
+    return from <= to ? h >= from && h < to : h >= from || h < to;
+  }
+
+  /**
+   * Сессияны тірі ұстау: тінтуірді сәл қозғау және бетке фокус беру.
+   * Ешқандай reload, goto немесе форма жіберу жоқ — тек «мен осындамын» сигналы.
+   */
+  private async nudge(page: Page): Promise<void> {
+    try {
+      const x = 120 + Math.random() * 500;
+      const y = 120 + Math.random() * 350;
+      await page.mouse.move(x, y, { steps: 3 });
+      /* Скролл кейін орнына қайтарылады: күзетші көретін аймақ өзгермеуі керек. */
+      const d = 20 + Math.random() * 40;
+      await page.mouse.wheel(0, d);
+      await sleep(120);
+      await page.mouse.wheel(0, -d);
+      this.lastMouseMove = Date.now();
+    } catch {
+      /* бет жабылып қалса келесі циклде көрінеді */
+    }
+  }
+
+  private async loop(): Promise<void> {
+    let missingWatcher = 0;
+
+    while (this.running && !this.stopRequested) {
+      try {
+        /* График: жұмыс уақытынан тыс тек бақылауды тоқтатамыз, браузерді
+         * жаппаймыз — оператордың ашып қойған беті жоғалмауы керек. */
+        if (!this.insideSchedule()) {
+          if (!this.pausedBySchedule) {
+            this.pausedBySchedule = true;
+            const page = await getPage().catch(() => null);
+            if (page) await stopWatcher(page);
+            log('info', 'CONTROL', `Внерабочее время (${this.hourNow()} ч) — наблюдение на паузе, страница сохранена`);
+            this.setState(WState.WAITING, 'Внерабочее время');
+          }
+          await sleep(20000);
+          continue;
+        }
+        if (this.pausedBySchedule) {
+          this.pausedBySchedule = false;
+          await this.reinstall();
+          log('info', 'CONTROL', 'Рабочее время началось — наблюдение возобновлено');
+          this.setState(WState.RUNNING, `Жду «${this.rule?.watchText ?? ''}»`);
+        }
+
+        const page = await getPage();
+        const s = getAllSettings();
+
+        /* Күзетші тірі ме. Бет ішінде ajax-навигация болса қайта енеді. */
+        const inst = await ensureWatcher(page, this.rule!, s.scanIntervalMs, s.confirmDelayMs);
+        if (inst.installed) {
+          missingWatcher += 1;
+          /* Қайта енгізу қалыпты (бет өзгерді), бірақ ол әрдайым сәтсіз болса —
+           * күзет мүлдем жұмыс істемей тұр, мұны жасыруға болмайды. */
+          if (!inst.alive) {
+            if (missingWatcher <= 3 || missingWatcher % 25 === 0) {
+              log('error', 'SYSTEM', `Наблюдатель не встаёт: ${inst.error ?? 'ошибка внедрения'}`);
+            }
+          } else if (missingWatcher <= 2 || missingWatcher % 50 === 0) {
+            log('info', 'SYSTEM', 'Наблюдатель переустановлен (страница изменилась)');
+          }
+        }
+
+        const url = page.url();
+        if (url !== this.watchUrl) {
+          this.watchUrl = url;
+          log('warn', 'SYSTEM', `Адрес страницы изменился: ${url.slice(0, 120)}`);
+        }
+
+        const report = await takeHits(page);
+        if (report) {
+          this.scans = report.scans;
+          for (const h of report.hits) {
+            await this.onHit(h);
+          }
+        }
+
+        if (Date.now() - this.lastMouseMove > s.mouseMoveSec * 1000) {
+          await this.nudge(page);
+        }
+
+        /* Node тарапындағы цикл жиілігі реакцияға әсер етпейді: клик бет ішінде
+         * жасалады, бұл жерде тек есеп жиналады. */
+        await sleep(400);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        log('error', 'SYSTEM', `Сбой наблюдения: ${msg.slice(0, 160)}`);
+        this.setState(WState.ERROR, msg.slice(0, 120));
+        await sleep(5000);
+        if (this.running && !this.stopRequested) {
+          this.setState(WState.RUNNING, `Жду «${this.rule?.watchText ?? ''}»`);
+        }
+      }
+    }
+  }
+
+  private async onHit(h: {
+    found: string;
+    clicked: string;
+    reactionMs: number;
+    confirmed: boolean;
+    confirmNotes: string[];
+    totalMs: number;
+  }): Promise<void> {
+    const ruleId = this.rule?.id;
+    recordCatch({
+      label: h.found || 'слот',
+      ok: h.confirmed,
+      totalMs: h.totalMs,
+      reactionMs: h.reactionMs,
+      ruleId,
+    });
+    if (ruleId) markRuleResult(ruleId, h.confirmed);
+
+    const detail = h.confirmNotes.length ? ` · ${h.confirmNotes.join(' → ')}` : '';
+    if (h.confirmed) {
+      log(
+        'success',
+        'WORKFLOW',
+        `✅ Поймано за ${h.reactionMs} мс: «${h.found}» → нажато «${h.clicked}»${detail} (всего ${h.totalMs} мс)`
+      );
+      void tgNotify(`✅ <b>SEM</b>: поймал слот за ${h.reactionMs} мс\n${h.found}`);
+    } else {
+      log(
+        'warn',
+        'WORKFLOW',
+        `⚠️ Клик выполнен за ${h.reactionMs} мс, но подтверждение не завершилось: «${h.found}»${detail}`
+      );
+      void tgNotify(`⚠️ <b>SEM</b>: клик был, подтверждение не прошло.\n${h.found}${detail}`);
+    }
+    await screenshot(h.confirmed ? 'catch-ok' : 'catch-partial');
+    bus.emit('status', this.snapshot());
   }
 
   private setState(s: WState, step?: string): void {
@@ -245,406 +334,10 @@ export class Engine {
     bus.emit('status', this.snapshot());
     if (s !== prev) {
       log('info', 'SYSTEM', `Состояние: ${STATE_META[prev].ru} → ${STATE_META[s].ru}`);
-      if (
-        s === WState.AUTH_REQUIRED ||
-        s === WState.MANUAL_REVIEW ||
-        s === WState.ERROR
-      ) {
-        void tgNotify(
-          `${STATE_META[s].emoji} <b>SEM</b>: ${STATE_META[s].ru}\n${this.step ?? ''}`
-        );
+      if (s === WState.ERROR) {
+        void tgNotify(`${STATE_META[s].emoji} <b>SEM</b>: ${STATE_META[s].ru}\n${this.step}`);
       }
     }
-  }
-
-  private makeCtx(page: Page): DriverCtx {
-    const self = this;
-    return {
-      page,
-      log,
-      setStep(label: string): void {
-        self.step = label;
-        bus.emit('status', self.snapshot());
-      },
-      async delay(mult = 1): Promise<void> {
-        const base = Number(getSetting('actionDelayMs')) || 800;
-        const speed = Number(getSetting('speed')) || 1;
-        await sleep(jittered(base * mult * speed));
-      },
-      async beginIntent(appId: string, type: string): Promise<string> {
-        self.currentAppId = appId;
-        bus.emit('status', self.snapshot());
-        return beginIntent(appId, type);
-      },
-      async confirmIntent(id: string): Promise<void> {
-        confirmIntent(id);
-      },
-      async failIntent(id: string, note?: string): Promise<void> {
-        failIntent(id, note);
-      },
-      async getPendingIntents(appId: string) {
-        return pendingIntentsForApp(appId);
-      },
-      async recordApplication(a): Promise<void> {
-        recordApplication(a);
-        if (a.appId) resolveCheckpointsForApp(a.appId);
-        bus.emit('status', self.snapshot());
-      },
-      async saveCheckpoint(c): Promise<void> {
-        saveCheckpoint(c);
-      },
-      rand(): number {
-        return Math.random();
-      },
-      async shot(name: string) {
-        return screenshot(name);
-      },
-      alive: () => self.running && !self.stopRequested && !self.paused,
-    };
-  }
-
-  private classifierFor(simulation: boolean, page: Page | null): ClassifierFn {
-    if (simulation || !page) {
-      return async () => {
-        await sleep(2500);
-        return { kind: 'NORMAL', reason: 'demo' };
-      };
-    }
-    return () => classifyPage(page);
-  }
-
-  private async loop(): Promise<void> {
-    let unexpectedCount = 0;
-    while (this.running && !this.stopRequested) {
-      try {
-        this.checkSchedule();
-        if (this.paused) {
-          await sleep(1500);
-          continue;
-        }
-        const s = getAllSettings();
-        const simulation = s.mode === 'simulation';
-        let page: Page | null = null;
-        let cls: Classification = { kind: 'NORMAL', reason: '' };
-
-        if (!simulation) {
-          page = await getPage();
-          cls = await classifyPage(page);
-          if (cls.kind === 'SECURITY') {
-            await this.securityWait(this.classifierFor(false, page));
-            continue;
-          }
-          if (cls.kind === 'AUTH') {
-            await this.handleAuthLost();
-            continue;
-          }
-          if (cls.kind === 'UNEXPECTED') {
-            unexpectedCount += 1;
-            if (unexpectedCount <= 2) {
-              log('warn', 'SYSTEM', `Страница не распознана (${cls.reason}) — возвращаюсь на сайт`);
-              const target = s.listUrl || s.siteUrl;
-              try {
-                await page.goto(target, { waitUntil: 'domcontentloaded', timeout: 20000 });
-              } catch {
-                /* retry next cycle */
-              }
-              await sleep(2000);
-              continue;
-            }
-            await this.manualReview(`Не удалось вернуться на сайт: ${cls.reason}`);
-            continue;
-          }
-          unexpectedCount = 0;
-        }
-
-        if (!this.lastKeepalive) this.lastKeepalive = Date.now();
-        await this.driver!.cycle(this.makeCtx(page ?? ({} as Page)));
-
-        const idleMs = Date.now() - this.lastKeepalive;
-        const keepaliveSec = Number(getSetting('keepaliveSec')) || 60; // Default to 60s for faster anti-AFK
-        if (!simulation && page && idleMs > keepaliveSec * 1000) {
-          await this.keepalive(page);
-          this.lastKeepalive = Date.now();
-        }
-      } catch (e) {
-        if (e instanceof SimulatedIncident) {
-          if (e.kind === 'SECURITY') {
-            await this.securityWait(this.classifierFor(true, null), true);
-          } else {
-            await this.handleAuthLost(true);
-          }
-          continue;
-        }
-        if (e instanceof MissingSelectorsError) {
-          await this.manualReview(e.message);
-          continue;
-        }
-        if (e instanceof SelectorBrokenError) {
-          const shot = await screenshot(`broken-${e.key.replace(/\W+/g, '_')}`);
-          log('error', 'WORKFLOW', `Элемент сайта не найден: ${e.key}. Скриншот сохранён, заявки не трогаю.`);
-          void tgNotify(
-            `🟠 <b>SEM</b>: элемент <code>${e.key}</code> на сайте не найден.\nСайт изменился? Обновите селекторы в Настройках (без передеплоя).\nСкриншот в журнале.`
-          );
-          await this.manualReview(e.message);
-          continue;
-        }
-        const msg = e instanceof Error ? e.message : String(e);
-        log('error', 'WORKFLOW', `Сбой цикла: ${msg.slice(0, 160)}`);
-        this.setState(WState.ERROR, msg.slice(0, 140));
-        await sleep(6000);
-        if (this.running && !this.stopRequested) this.setState(WState.RUNNING);
-      }
-    }
-  }
-
-  private async keepalive(page: Page): Promise<void> {
-    try {
-      await page.evaluate(
-        `fetch(location.href,{method:'HEAD',cache:'no-store'}).catch(()=>{})`
-      );
-      await page.mouse.move(200 + Math.random() * 300, 150 + Math.random() * 200);
-      await page.mouse.wheel(0, 60 + Math.random() * 80);
-      await page.mouse.wheel(0, -(60 + Math.random() * 80));
-      log('info', 'SYSTEM', 'Поддержание активности сессии (HTTP-пинг без перезагрузки)');
-      this.lastActivity = Date.now();
-    } catch {
-      /* ignore */
-    }
-  }
-
-  private async revalidate(classify: ClassifierFn): Promise<boolean> {
-    log('info', 'SYSTEM', 'Перепроверка состояния: сайт → сессия → текущая заявка');
-    await sleep(1200);
-    const cls = await classify();
-    log('info', 'SYSTEM', cls.kind === 'NORMAL'
-      ? 'Проверка пройдена: страница и сессия в норме'
-      : `Проверка: ${cls.reason}`);
-    return cls.kind === 'NORMAL';
-  }
-
-  private async securityWait(classify: ClassifierFn, simulated = false): Promise<void> {
-    const timeoutMin = Number(getSetting('securityTimeoutMin')) || 30;
-    log(
-      'warn',
-      'SECURITY',
-      `Обнаружена проверка безопасности сайта. Действия приостановлены, жду автоматического завершения (лимит ${timeoutMin} мин). Обход проверки не выполняется.`
-    );
-    await screenshot('security-wait');
-    void tgNotify(`🛡 <b>SEM</b>: сайт показал проверку безопасности. Ожидаю автоматического завершения…`);
-    this.setState(WState.SECURITY_VERIFICATION_WAIT, 'Ожидание проверки сайта');
-
-    const deadline = Date.now() + timeoutMin * 60000;
-    while (Date.now() < deadline && this.running && !this.stopRequested) {
-      await sleep(simulated ? 3000 : 5000);
-      const cls = await classify().catch(() => ({ kind: 'UNEXPECTED' as const, reason: 'poll' }));
-      if (cls.kind === 'NORMAL') {
-        log('success', 'SECURITY', 'Проверка завершилась автоматически. Перепроверяю состояние…');
-        await this.revalidate(classify);
-        this.setState(WState.RUNNING, 'Возобновление после проверки');
-        log('success', 'SECURITY', 'Работа возобновлена с контрольной точки без потери заявки');
-        return;
-      }
-      if (cls.kind === 'AUTH') {
-        await this.handleAuthLost();
-        return;
-      }
-    }
-    await screenshot('security-timeout');
-    await this.safeStop(
-      `Проверка безопасности не завершилась за ${timeoutMin} мин. Состояние сохранено (SAFE_STOP).`
-    );
-  }
-
-  private async handleAuthLost(simulated = false): Promise<void> {
-    log('warn', 'AUTH', 'Сессия истекла: сайт требует вход. Пробую войти автоматически…');
-    await screenshot('auth-lost');
-    if (!this.authAlerted) {
-      void tgNotify('🔐 <b>SEM</b>: сессия истекла. Выполняю автоматический вход…');
-      this.authAlerted = true;
-    }
-    this.setState(WState.AUTH_REQUIRED, 'Автоматический вход');
-
-    const ok = simulated ? await this.simLogin() : await this.tryLogin();
-    if (ok) {
-      this.authAlerted = false;
-      await backupSession();
-      log('success', 'AUTH', 'Вход выполнен. Сессия сохранена (backup). Продолжаю с контрольной точки.');
-      this.setState(WState.RUNNING, 'Возобновление после входа');
-      return;
-    }
-
-    let waitHint = 'Жду оператора (панель / VNC).';
-    try {
-      const pg = await getPage();
-      const otpish = await pg.evaluate(
-        `(() => {
-          const el = [...document.querySelectorAll('input')].find((x) =>
-            x.offsetParent &&
-            /one-time-code|sms|code|код/i.test((x.name || '') + (x.id || '') + (x.placeholder || ''))
-          );
-          const txt = document.body.innerText.slice(0, 2500);
-          return !!(el || /введите код|код из sms|смс-код/i.test(txt));
-        })()`
-      );
-      if (otpish) {
-        waitHint = 'Похоже, нужен код из SMS — введите его через VNC, бот сам продолжит.';
-      }
-    } catch {
-      /* page unavailable */
-    }
-
-    log('error', 'AUTH', `Автоматический вход не удался. ${waitHint}`);
-    void tgNotify(`🔐 <b>SEM</b>: автоматический вход не удался. ${waitHint}`);
-    this.setState(WState.AUTH_REQUIRED, 'Ожидаю вход оператором');
-
-    const deadline = Date.now() + 120 * 60000;
-    const s = getAllSettings();
-    while (Date.now() < deadline && this.running && !this.stopRequested) {
-      await sleep(8000);
-      if (simulated) {
-        log('success', 'AUTH', '(Демо) Оператор «вошёл». Возобновляю работу.');
-        this.setState(WState.RUNNING, 'Возобновление после входа');
-        return;
-      }
-      const page = await getPage().catch(() => null);
-      if (!page) continue;
-      const cls = await classifyPage(page).catch(() => ({ kind: 'UNEXPECTED' as const, reason: '' }));
-      if (cls.kind === 'NORMAL') {
-        log('success', 'AUTH', 'Обнаружен успешный вход. Сессия сохраняется. Возобновляю работу.');
-        await backupSession();
-        this.setState(WState.RUNNING, 'Возобновление после входа');
-        return;
-      }
-      void s;
-    }
-    if (this.running && !this.stopRequested) {
-      await this.safeStop('Вход не выполнен за 120 минут ожидания.');
-    }
-  }
-
-  private async simLogin(): Promise<boolean> {
-    log('info', 'AUTH', '(Демо) Ввожу логин и пароль…');
-    await sleep(2200);
-    log('info', 'AUTH', '(Демо) Отправляю форму входа…');
-    await sleep(1500);
-    return true;
-  }
-
-  private async robustFill(
-    page: Page,
-    loc: import('playwright').Locator,
-    value: string
-  ): Promise<void> {
-    await loc.click({ timeout: 4000 }).catch(() => {});
-    await loc.fill(value, { timeout: 4000 }).catch(async () => {
-      await loc.pressSequentially(value, { delay: 40 }).catch(() => {});
-    });
-    const v = await loc.inputValue().catch(() => '');
-    if (v !== value) {
-      await loc.click().catch(() => {});
-      await loc.pressSequentially(value, { delay: 40 }).catch(() => {});
-    }
-  }
-
-  private async tryLogin(quiet = false): Promise<boolean> {
-    const s = getAllSettings();
-    let custom: { user?: string[]; password?: string[]; submit?: string[] } = {};
-    try {
-      if (s.loginSelectorsJson.trim()) custom = JSON.parse(s.loginSelectorsJson);
-    } catch {
-      /* ignore bad json */
-    }
-    const userCands = [
-      ...(custom.user ?? []),
-      'input[type=email]:visible',
-      '#hub-identifier',
-      'input[name*=user i]',
-      'input[name*=login i]',
-      'input[name*=mail i]',
-      'input[type=text]:visible',
-    ];
-    const passCands = [...(custom.password ?? []), 'input[type=password]:visible'];
-    const submitCands = [
-      ...(custom.submit ?? []),
-      'button[type=submit]',
-      '.partner-auth-submit',
-      'input[type=submit]',
-      'button:has-text("Войти")',
-      'button:has-text("Log in")',
-      'button:has-text("Sign in")',
-    ];
-
-    const firstVisible = async (cands: string[]) => {
-      for (const c of cands) {
-        try {
-          const l = page0.locator(c).first();
-          if ((await l.count()) > 0 && (await l.isVisible())) return l;
-        } catch {
-          /* next */
-        }
-      }
-      return null;
-    };
-
-    let page0!: Page;
-    try {
-      page0 = await getPage();
-      await page0.goto(s.siteUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await sleep(2000);
-      const userLoc = await firstVisible(userCands);
-      const passLoc = await firstVisible(passCands);
-      if (!userLoc || !passLoc) {
-        if (!quiet) log('warn', 'AUTH', 'Форма входа не найдена на странице');
-        return false;
-      }
-      await this.robustFill(page0, userLoc, s.username);
-      await this.robustFill(page0, passLoc, s.password);
-      let submit = await firstVisible(submitCands);
-      if (!submit) submit = passLoc;
-      await submit.click({ timeout: 5000 }).catch(async () => {
-        await passLoc.press('Enter').catch(() => {});
-      });
-      await sleep(4000);
-      const cls = await classifyPage(page0);
-      return cls.kind !== 'AUTH';
-    } catch (e) {
-      if (!quiet) log('error', 'AUTH', `Ошибка входа: ${String(e).slice(0, 120)}`);
-      return false;
-    }
-  }
-
-  private async manualReview(reason: string): Promise<void> {
-    log('warn', 'SYSTEM', `Ручное вмешательство: ${reason}`);
-    await screenshot('manual-review');
-    void tgNotify(`🟠 <b>SEM</b>: требуется внимание оператора.\n${reason}`);
-    this.setState(WState.MANUAL_REVIEW, reason.slice(0, 120));
-
-    const s = getAllSettings();
-    const simulate = s.mode === 'simulation';
-    const deadline = Date.now() + 120 * 60000;
-    const page = simulate ? null : await getPage().catch(() => null);
-    const classify = this.classifierFor(simulate, page);
-    while (Date.now() < deadline && this.running && !this.stopRequested) {
-      await sleep(simulate ? 4000 : 10000);
-      const cls = await classify().catch(() => ({ kind: 'UNEXPECTED' as const, reason: '' }));
-      if (cls.kind === 'NORMAL') {
-        log('success', 'SYSTEM', 'Проблема устранена. Перепроверяю и продолжаю работу.');
-        await this.revalidate(classify);
-        this.setState(WState.RUNNING, 'Возобновление работы');
-        return;
-      }
-    }
-    if (this.running && !this.stopRequested) {
-      await this.safeStop('Ручная проверка не завершена за отведённое время.');
-    }
-  }
-
-  private async safeStop(reason: string): Promise<void> {
-    log('error', 'SYSTEM', `SAFE_STOP: ${reason}`);
-    void tgNotify(`⏸ <b>SEM</b>: безопасная остановка.\n${reason}\nЧекпоинт сохранён — запуск возобновит работу.`);
-    this.running = false;
-    this.stopRequested = true;
-    this.setState(WState.MANUAL_REVIEW, reason.slice(0, 140));
   }
 
   async shutdown(): Promise<void> {

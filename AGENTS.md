@@ -1,29 +1,79 @@
 # sem-work жобалық нұсқаулық
 
 ## Мақсат
-SEM — сайттағы өтініштерді өңдеуші worker + веб-панель (RU, dark, mobile-first).
+SEM — электронды кезек сайтында **бос орын шыққанда оны бір ілезде іліп алатын** робот
+және оның веб-панелі (RU, dark, mobile-first).
+
+## Негізгі принцип (архитектура)
+Оператор бетті керек жерге дейін **өзі** апарады. Робот содан кейін тек күзетеді.
+
+```
+оператор → бетті дайындайды (VNC)
+         → тапсырманы сөзбен жазады
+learn.ts → МОДЕЛЬГЕ БІР РЕТ сұраныс → ереже (rules.ts, SQLite)
+watcher.ts → ереже бет ІШІНДЕ орындалады: MutationObserver + таймер
+           → шарт пайда болған сол JS тактында el.click()
+engine.ts → тек бақылайды: күзетші тірі ме, тінтуірді қозғау, есеп жазу
+```
+
+**Модель hot path-та жоқ.** Бір `decide()` шақыруы 3–8 секунд, ал бос орын
+секундтың бөлігінде жоғалады. Өлшенген нақты реакция: **53 мс**.
 
 ## Стек
-Node 22 + TypeScript (ESM, NodeNext), Fastify, better-sqlite3, Playwright 1.49, ws.
-Frontend: vanilla JS/CSS (public/), Chart.js CDN.
+Node 22 + TypeScript (ESM, NodeNext), Fastify, better-sqlite3, Playwright, ws.
+Frontend: vanilla JS/CSS (public/), Chart.js тек «Статистика» ашылғанда жүктеледі.
 
 ## Командалар
 - `npm run typecheck` — tsc --noEmit (міндетті, commit алдында)
-- `npm run build && npm start` — dist арқылы іске қосу
-- Smoke: `HEADLESS=true PORT=8099 SEM_DATA_DIR=./tmp-data node dist/index.js` → curl `/api/status`, `/healthz`
+- `npm run build && npm start`
+- Deploy: `tar czf → base64 → rssh.sh → /etc/dokploy/compose/sem-sem-hhdokw/code → docker compose up -d --build`
 
-## Ережелер
-- Пароль/telegram token чатқа, git-ке, log-қа кірмейді. UI `__SAVED__` placeholder қолданады.
-- **Агент әрекеті `ref` арқылы**: `src/dom.ts` беттегі интерактив элементтерді жинап нөмірлейді (жасырын checkbox/radio, `cursor:pointer` карточкалар да кіреді), модель `{"act":"click","ref":N}` қайтарады, клик Playwright locator арқылы жасалады. Таза координат бойынша басу — viewport ішінде ғана және тек ref болмаса. Себебі: сайттың `Далее` батырмасы y=864, ал viewport 760 — координат бойынша клик ешқайда түспейді.
-- **Тоқтату**: `POST /api/ai/stop` → `stopAiTask()` флагы; цикл әр қадам мен әр `nap()` ішінде тексереді. `engine.stop()/pause()` да осыны шақырады. Панельдегі СТОП батырмасы ешқашан `disabled` болмайды.
-- **Модельсіз құралдар**: `GET /api/tools/inspect` (бот не көріп тұр) және `POST /api/tools/act` (`{act,ref,text,...}`) — API квотасын жұмсамай тексеруге арналған. Жаңа сайтты зерттегенде бірінші осыны қолдану керек.
-- **CSS**: `public/css/style.css` — жалғыз spacing шкаласы `--s1..--s4` және жалғыз `.card > * + *` ережесі. Файл соңына қосымша блок жазуға болмайды (бұрын солай істелген еді, `--acc` айнымалысы жоқ болғандықтан ережелер үнсіз бұзылған). Түстер: `--acc`, `--acc-soft`, `--acc-line`, `--acc-glow`.
-- **Frontend жылдамдығы**: index.html-де сыртқы blocking `<link>`/`<script>` жоқ. Chart.js тек «Статистика» ашылғанда `loadChartLib()` арқылы жүктеледі; шрифт — жүйелік stack.
-- Security challenge ешқашан обход жасалмайды: тек WAIT → DETECT → REVALIDATE → RESUME.
-- Critical әрекет алдынынан ledger intent жазылады; resume кезінде reconcile міндетті (duplicate protection).
-- Reload тек UNEXPECTED recovery-де ғана; SECURITY_WAIT ішінде reload/pagination жоқ.
-- Жаңа driver қосу үшін WorkflowDriver interface-ін ұстану (src/types.ts).
+## Файлдар
+| Файл | Рөлі |
+|---|---|
+| `src/watcher.ts` | Бет ішіндегі күзетші. Ең маңызды файл. |
+| `src/rules.ts` | Үйренген ереже + сәттілік санауышы (SQLite `rules`). |
+| `src/learn.ts` | Модельге бір рет сұрау → ереже JSON. |
+| `src/engine.ts` | Күзет циклі: ensureWatcher, nudge, takeHits, есеп. |
+| `src/dom.ts` | Элементтерді нөмірлеп шығару (үйрету мен диагностика үшін). |
+| `src/gemini.ts` | `askVision` (үйрету), `testKey` (квота тексеру). |
 
-## Белгісіздер / кезектегі жұмыстар
-- Нақты сайттың селекторлары мен login эвристикасы — тапсырыс берушінің скриншоттары келгенше generic.
-- noVNC сыртқы домен/авторизация (NOVNC_PUBLIC_URL) — deploy кезінде шешіледі.
+## Қатаң ережелер
+- **Бет ЕШҚАШАН reload/goto жасалмайды** күзет кезінде. Сайт wizard-пен жүреді,
+  қайта жүктеу барлық толтырылған қадамды нөлге қайтарады. `/api/tools/open`
+  күзет жүріп тұрғанда әдейі тыйылған.
+- **Клик Node-тан емес, бет ішінен.** Node-тан CDP арқылы клик 150–400 мс,
+  бет ішінде 1–50 мс. Күзетші `MutationObserver` + резерв таймер қолданады.
+- **Сессияны тірі ұстау** — тек тінтуір қозғалысы (`nudge`), HTTP-пинг немесе
+  reload жоқ.
+- **Клик соңында 1500 мс cooldown** + басылған түймені `done`-ға белгілеу:
+  әйтпесе бір блоктың сыртқы және ішкі элементі екеуі де сәйкес келіп, түйме
+  екі рет басылады (осы қате тестте көрінген).
+- **Есеп sessionStorage арқылы.** Клик навигация тудырса, JS-күй жоғалады —
+  сондықтан hits `sessionStorage`-та сақталады, `takeHits` күзетші өлген жағдайда
+  да оны оқиды.
+- **Статистика тек нақты орындалғанды санайды**: `result='done'` — шарт табылды,
+  басылды **және** растау толық өтті. `reaction_ms` — жылдамдықтың жалғыз
+  мағыналы көрсеткіші.
+- **CSS**: `public/css/style.css` — жалғыз spacing шкаласы `--s1..--s4` және
+  жалғыз `.card > * + *` ережесі. Файл соңына қосымша блок жазуға болмайды.
+- Пароль/telegram token/API key чатқа, git-ке, log-қа кірмейді. UI `__SAVED__`.
+
+## Диагностика (API квотасын жұмсамай)
+- `GET /api/tools/inspect` — бот не көріп тұр + күзетшінің ішкі күйі (`armed`,
+  `scans`, `cfg`, `pendingHits`).
+- `POST /api/tools/probe {text,scope}` — шарт **қазір** бетте бар ма (клик жоқ).
+- `POST /api/tools/simulate` — бетке уақытша тест блок қосады, робот оны ұстауы
+  керек. Нақты сайтқа тимейді, 20 секундта өзі жойылады.
+
+## Модель туралы
+Тек үйрету үшін керек. Тексерілген: `qwen/qwen3-vl-plus:free`,
+`qwen/qwen3.8-max:free` жұмыс істейді (xkiro провайдері). `google/gemini-*`
+осы кілтпен 403 қайтарады — «pay-as-you-go premium requires real deposited
+balance», бонус кредит жарамайды. `testKey` енді нақты генерация сұранысын
+жасайды, сондықтан «ключ работает» деген жалған жасыл жауап болмайды.
+
+## Белгісіздер
+- Нақты «бос орын» мәтіні әлі белгісіз (`Свободно` деп болжанады) — шыққан кезде
+  ережені қайта үйрету керек.
+- noVNC сыртқы домен/авторизация (`NOVNC_PUBLIC_URL`) — қазір ішкі прокси арқылы.

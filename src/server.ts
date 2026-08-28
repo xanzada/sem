@@ -16,14 +16,11 @@ import {
   maskSettings,
   applySecretPlaceholders,
 } from './settings.js';
-import { analyticsSummary } from './analytics.js';
+import { analyticsSummary, resetStats } from './analytics.js';
 import { log } from './logger.js';
-import { latestCheckpoint } from './checkpoint.js';
-import { registerDemoSite } from './demo-site.js';
-import * as picker from './picker.js';
 import { getPage } from './browser.js';
-import { classifyPage } from './classifier.js';
-import { readSelectors } from './workflow.js';
+import { collectDom } from './dom.js';
+import { listRules, activateRule, deactivateAll, deleteRule, activeRule } from './rules.js';
 import type { Engine } from './engine.js';
 
 const PANEL_USER = process.env.PANEL_USER ?? 'admin';
@@ -53,7 +50,7 @@ function cookieValid(raw: string | undefined): boolean {
   }
 }
 
-function getCookie(req: any, name: string): string | undefined {
+function getCookie(req: { headers: Record<string, unknown> }, name: string): string | undefined {
   const raw = req.headers.cookie;
   if (!raw) return undefined;
   for (const part of String(raw).split(';')) {
@@ -63,9 +60,8 @@ function getCookie(req: any, name: string): string | undefined {
   return undefined;
 }
 
-function authed(req: any): boolean {
-  const c = getCookie(req, 'sem_auth');
-  if (cookieValid(c)) return true;
+function authed(req: { headers: Record<string, unknown> }): boolean {
+  if (cookieValid(getCookie(req, 'sem_auth'))) return true;
   const hdr = String(req.headers.authorization ?? '');
   if (!hdr) return false;
   const good = expectedAuthHeader();
@@ -80,9 +76,7 @@ function vncLocalUrl(): string {
   if (NOVNC_PUBLIC_URL) return NOVNC_PUBLIC_URL;
   if (process.env.SEM_VNC_LOCAL === '1') {
     /* resize=scale, а не remote: Xvfb за x11vnc отказывает в изменении
-     * разрешения («Resize is administratively prohibited»), и тогда noVNC
-     * показывает только левый верхний угол экрана — со стороны это выглядит
-     * как пустой экран. Масштабирование на стороне клиента показывает всё. */
+     * разрешения, и тогда noVNC показывает только левый верхний угол экрана. */
     return '/vnc/vnc.html?autoconnect=1&resize=scale&reconnect=1&reconnect_delay=1500&show_dot=1&quality=6&compression=2&path=vnc/websockify';
   }
   return '';
@@ -150,14 +144,8 @@ export async function buildServer(engine: Engine): Promise<void> {
   const app = Fastify({ logger: false });
 
   await app.register(fastifyStatic, { root: PUBLIC_DIR });
-  await app.register(fastifyStatic, {
-    root: SHOTS_DIR,
-    prefix: '/shots/',
-    decorateReply: false,
-  });
+  await app.register(fastifyStatic, { root: SHOTS_DIR, prefix: '/shots/', decorateReply: false });
   await app.register(formBody);
-
-  registerDemoSite(app);
 
   app.addHook('onRequest', async (req, reply) => {
     if (req.url.startsWith('/vnc')) {
@@ -172,7 +160,6 @@ export async function buildServer(engine: Engine): Promise<void> {
     if (
       u === '/healthz' ||
       u.startsWith('/healthz?') ||
-      u.startsWith('/site') ||
       u.startsWith('/vnc') ||
       u === '/login' ||
       u === '/api/login' ||
@@ -191,6 +178,8 @@ export async function buildServer(engine: Engine): Promise<void> {
     return reply.redirect('/login');
   });
 
+  /* ---------------- вход в панель ---------------- */
+
   app.get('/login', async (_req, reply) => {
     try {
       const html = await readFile(join(PUBLIC_DIR, 'login.html'), 'utf-8');
@@ -201,7 +190,8 @@ export async function buildServer(engine: Engine): Promise<void> {
   });
 
   app.post('/api/login', async (req, reply) => {
-    const { u, p, remember } = ((req.body ?? {}) as { u?: string; p?: string; remember?: boolean }) ?? {};
+    const { u, p, remember } =
+      ((req.body ?? {}) as { u?: string; p?: string; remember?: boolean }) ?? {};
     if (u !== PANEL_USER || p !== PANEL_PASSWORD) {
       reply.code(401);
       return { ok: false };
@@ -234,10 +224,24 @@ export async function buildServer(engine: Engine): Promise<void> {
     return reply.redirect('/login');
   });
 
-  app.get('/api/status', async () => ({
-    snap: engine.snapshot(),
-    time: new Date().toISOString(),
-  }));
+  /* ---------------- состояние ---------------- */
+
+  app.get('/api/status', async () => {
+    /* Адрес берём напрямую из браузера: он важен и когда наблюдение выключено,
+     * иначе оператор не видит, на какой странице он остановился. */
+    let pageUrl = '';
+    try {
+      pageUrl = (await getPage()).url();
+    } catch {
+      pageUrl = '';
+    }
+    const snap = engine.snapshot();
+    return {
+      snap: { ...snap, watchUrl: snap.watchUrl || pageUrl },
+      rule: activeRule(),
+      time: new Date().toISOString(),
+    };
+  });
 
   app.get('/api/meta', async () => ({ vncUrl: vncLocalUrl(), version: VERSION }));
 
@@ -252,20 +256,14 @@ export async function buildServer(engine: Engine): Promise<void> {
   });
 
   app.get('/api/events', async (req) => {
-    const q = (req.query ?? {}) as { limit?: string; category?: string; level?: string };
+    const q = (req.query ?? {}) as { limit?: string; category?: string };
     const limit = Math.min(500, Math.max(1, Number(q.limit ?? 80)));
     let sql = 'SELECT id,ts,level,category,message,meta FROM events';
-    const conds: string[] = [];
     const params: (string | number)[] = [];
     if (q.category) {
-      conds.push('category=?');
+      sql += ' WHERE category=?';
       params.push(q.category.toUpperCase());
     }
-    if (q.level) {
-      conds.push('level=?');
-      params.push(q.level);
-    }
-    if (conds.length > 0) sql += ' WHERE ' + conds.join(' AND ');
     sql += ' ORDER BY id DESC LIMIT ?';
     params.push(limit);
     return db.prepare(sql).all(...params);
@@ -274,237 +272,195 @@ export async function buildServer(engine: Engine): Promise<void> {
   app.get('/api/analytics', async () => analyticsSummary());
 
   app.post('/api/stats/reset', async () => {
-    const { resetStats } = await import('./analytics.js');
     const r = resetStats();
     log('info', 'CONTROL', `Статистика обнулена (удалено записей: ${r.removed})`);
     bus.emit('status', engine.snapshot());
     return { ok: true, ...r };
   });
 
-  app.get('/api/selectors-health', async () => {
-    const s = getAllSettings();
-    const snap = engine.snapshot();
-    if (s.mode !== 'live' || !s.siteUrl) {
-      return { ok: false, reason: 'Боевой режим және сайт адресі керек' };
-    }
-    if (snap.running && !snap.paused) {
-      return { ok: false, reason: 'Бот жұмыс істеп тұр — алдымен ⏸ Пауза басыңыз' };
+  app.get('/healthz', async () => ({ ok: true }));
+
+  /* ---------------- обучение и правила ---------------- */
+
+  /* Модель вызывается РОВНО один раз здесь. Дальше работа идёт внутри страницы. */
+  app.post('/api/learn', async (req) => {
+    const { task } = ((req.body ?? {}) as { task?: string }) ?? {};
+    const text = String(task ?? '').trim();
+    if (text) setSettingsPatch({ taskText: text });
+    const { learnRule } = await import('./learn.js');
+    const r = await learnRule(text || String(getAllSettings().taskText || ''));
+    if (r.ok) engine.applySettings();
+    return r;
+  });
+
+  app.get('/api/rules', async () => ({ rules: listRules(), active: activeRule() }));
+
+  app.post('/api/rules/activate', async (req) => {
+    const { id } = ((req.body ?? {}) as { id?: string }) ?? {};
+    if (!id) return { ok: false, reason: 'id required' };
+    activateRule(String(id));
+    engine.applySettings();
+    log('info', 'CONTROL', 'Активировано другое правило');
+    return { ok: true, active: activeRule() };
+  });
+
+  app.post('/api/rules/off', async () => {
+    deactivateAll();
+    engine.applySettings();
+    return { ok: true };
+  });
+
+  app.post('/api/rules/delete', async (req) => {
+    const { id } = ((req.body ?? {}) as { id?: string }) ?? {};
+    if (!id) return { ok: false, reason: 'id required' };
+    deleteRule(String(id));
+    engine.applySettings();
+    return { ok: true, rules: listRules() };
+  });
+
+  /* ---------------- наблюдение ---------------- */
+
+  app.post('/api/watch/start', async () => {
+    await engine.start();
+    return { ok: engine.snapshot().running, snap: engine.snapshot() };
+  });
+
+  app.post('/api/watch/stop', async () => {
+    engine.stop();
+    return { ok: true, snap: engine.snapshot() };
+  });
+
+  /* ---------------- диагностика без модели ---------------- */
+
+  /* Открыть страницу из панели — так удобнее, чем печатать адрес в VNC.
+   * Дальше оператор доводит страницу до нужного шага вручную. */
+  app.post('/api/tools/open', async (req) => {
+    const { url } = ((req.body ?? {}) as { url?: string }) ?? {};
+    const target = String(url ?? '').trim();
+    if (!/^https?:\/\//i.test(target)) return { ok: false, reason: 'нужен адрес http(s)://' };
+    if (engine.snapshot().running) {
+      return { ok: false, reason: 'Сначала остановите наблюдение — переход сбросил бы страницу' };
     }
     try {
       const page = await getPage();
-      await page.goto(s.listUrl || s.siteUrl, {
-        waitUntil: 'domcontentloaded',
-        timeout: 20000,
-      });
-      await page.waitForTimeout(1500);
-      const cls = await classifyPage(page);
-      if (cls.kind === 'AUTH') return { ok: false, needsLogin: true };
-      const sel = readSelectors();
-      const items: { key: string; ok: boolean }[] = [];
-      const listRowC = Array.isArray(sel.listRow)
-        ? sel.listRow
-        : sel.listRow
-          ? [sel.listRow]
-          : [];
-      if (listRowC.length === 0) {
-        return {
-          ok: false,
-          reason: 'Селекторы ещё не обучены — воспользуйтесь 🎯 Режимом обучения (Настройки, выше)',
-        };
-      }
-      let found = false;
-      for (const rs of listRowC) {
-        try {
-          if ((await page.locator(rs).first().count()) > 0) {
-            items.push({ key: `listRow: ${rs}`, ok: true });
-            found = true;
-            break;
-          }
-        } catch {
-          /* next */
-        }
-      }
-      if (listRowC.length > 0 && !found) items.push({ key: 'listRow', ok: false });
-      const pendC = Array.isArray(sel.statusPending)
-        ? sel.statusPending
-        : sel.statusPending
-          ? [sel.statusPending]
-          : [];
-      let pf = false;
-      for (const ps of pendC) {
-        try {
-          if ((await page.locator(ps).first().count()) > 0) {
-            pf = true;
-            break;
-          }
-        } catch {
-          /* next */
-        }
-      }
-      items.push({ key: 'statusPending', ok: pf });
-      return {
-        ok: true,
-        checkedAt: new Date().toISOString(),
-        items,
-        note: 'acceptButton / statusAccepted — деталь бетте, жұмыс кезінде тексеріледі',
-      };
+      await page.goto(target, { waitUntil: 'domcontentloaded', timeout: 40000 });
+      log('info', 'CONTROL', `Открыта страница: ${target.slice(0, 140)}`);
+      return { ok: true, url: page.url(), title: await page.title().catch(() => '') };
     } catch (e) {
-      return { ok: false, reason: String(e).slice(0, 140) };
+      return { ok: false, reason: String(e).slice(0, 160) };
     }
   });
 
-  app.get('/api/checkpoint', async () => latestCheckpoint() ?? null);
-
-  app.get('/healthz', async () => ({ ok: true }));
-
-  app.get('/api/debug/shot', async () => {
-    const f = await import('./browser.js').then((m) => m.screenshot('manual'));
-    return { ok: !!f, file: f };
-  });
-
-  app.get('/api/debug/dump', async () => {
-    const page = await import('./browser.js').then((m) => m.getPage());
-    return page.evaluate(`(() => ({
-      url: location.href,
-      title: document.title,
-      bodyText: document.body.innerText.slice(0, 1200),
-      inputs: [...document.querySelectorAll('input,textarea')].map((i) => ({
-        t: i.type, id: i.id, name: i.name, ph: i.placeholder,
-      })),
-      buttons: [...document.querySelectorAll('button,[role=button]')]
-        .map((b) => ({ txt: (b.innerText || '').trim().slice(0, 40), cls: String(b.className).slice(0, 60) }))
-        .filter((b) => b.txt)
-        .slice(0, 30),
-      links: [...document.querySelectorAll('a')]
-        .map((a) => ({ txt: a.innerText.trim().slice(0, 30), href: a.getAttribute('href') }))
-        .filter((l) => l.txt)
-        .slice(0, 30),
-      tables: [...document.querySelectorAll('table tbody')]
-        .map((t) => ({ rows: t.querySelectorAll('tr').length })),
-    }))()`);
-  });
-
-  app.post('/api/picker/start', async (req) => {
-    const snap = engine.snapshot();
-    if (snap.running && !snap.paused) {
-      return { ok: false, reason: 'Бот сейчас работает — сначала нажмите ⏸ Пауза или ⏹ Стоп' };
-    }
-    const { url } = ((req.body ?? {}) as { url?: string }) ?? {};
-    return picker.startPicker(url);
-  });
-
-  app.post('/api/picker/reinject', async () => picker.reinject());
-
-  app.post('/api/picker/demo', async (req) => {
-    const snap = engine.snapshot();
-    if (snap.running && !snap.paused) {
-      return { ok: false, reason: 'Бот сейчас работает — сначала ⏸ Пауза' };
-    }
-    const { url, selectors } = ((req.body ?? {}) as {
-      url?: string;
-      selectors?: string[];
-    }) ?? {};
-    return picker.demoClicks(url, Array.isArray(selectors) ? selectors : []);
-  });
-
-  app.get('/api/picker/picks', async () => {
-    await picker.heartbeat();
-    return {
-      active: picker.isActive(),
-      picks: picker.list(),
-    };
-  });
-
-  app.post('/api/picker/label', async () => ({ ok: true }));
-
-  app.post('/api/picker/save', async () => ({ ok: true, json: '{}' }));
-
-  app.post('/api/picker/save-steps', async () => {
-    const { parseSteps } = await import('./workflow.js');
-    engine.applySettings();
-    return { ok: true, count: parseSteps().length };
-  });
-
-  app.get('/api/steps', async () => {
-    const { parseSteps } = await import('./workflow.js');
-    return { steps: parseSteps() };
-  });
-
-  app.post('/api/steps', async (req) => {
-    const { steps } = ((req.body ?? {}) as { steps?: unknown }) ?? {};
-    if (!Array.isArray(steps)) return { ok: false, error: 'steps array required' };
-    setSettingsPatch({ stepsJson: JSON.stringify(steps) });
-    engine.applySettings();
-    return { ok: true, count: steps.length };
-  });
-
-  app.post('/api/picker/stop', async () => picker.stop());
-
-  app.get('/api/ai/state', async () => {
-    const { agentState } = await import('./agent.js');
-    return agentState();
-  });
-
-  app.post('/api/ai/run', async (req) => {
-    const { task, maxSteps } = ((req.body ?? {}) as { task?: string; maxSteps?: number }) ?? {};
-    const { runAiTask } = await import('./agent.js');
-    return runAiTask(String(task ?? ''), Math.min(40, Math.max(1, Number(maxSteps ?? 25))));
-  });
-
-  /* Отдельная кнопка «стоп» для агента: она не должна ждать окончания
-   * текущего шага — просто поднимает флаг, цикл проверяет его между шагами. */
-  app.post('/api/ai/stop', async () => {
-    const { stopAiTask } = await import('./agent.js');
-    return stopAiTask();
-  });
-
-  /* Инструменты агента без модели: видно, что именно бот «видит» на странице,
-   * и можно проверить клик/ввод, не тратя квоту API. */
+  /* Что именно «видит» бот на странице — нужно при разборе, почему правило
+   * не сработало. Квота API при этом не тратится. */
   app.get('/api/tools/inspect', async () => {
     const page = await getPage();
-    const { collectDom } = await import('./dom.js');
     const els = await collectDom(page);
-    const vp = page.viewportSize() ?? { width: 0, height: 0 };
-    return { url: page.url(), title: await page.title().catch(() => ''), viewport: vp, count: els.length, elements: els };
+    /* Күзетшінің ішкі күйі: неге ұстамағанын тек осыдан көруге болады. */
+    const watch = await page
+      .evaluate(
+        `(() => {
+          const W = window['__semWatch'];
+          if (!W) return { present: false };
+          return {
+            present: true,
+            armed: W.state.armed,
+            busy: W.state.busy,
+            scans: W.state.scans,
+            pendingHits: (W.pending ? W.pending() : -1),
+            doneKeys: W.state.doneKeys ? W.state.doneKeys.size : -1,
+            cfg: W.cfg || null,
+            lastError: W.state.lastError || null,
+          };
+        })()`
+      )
+      .catch((e) => ({ present: false, error: String(e).slice(0, 120) }));
+    return {
+      url: page.url(),
+      title: await page.title().catch(() => ''),
+      viewport: page.viewportSize() ?? { width: 0, height: 0 },
+      count: els.length,
+      watcher: watch,
+      elements: els,
+    };
   });
 
-  app.post('/api/tools/act', async (req) => {
-    const body = (req.body ?? {}) as Record<string, unknown>;
+  /* Проверка правила «вживую»: ищем текст сейчас, без клика. */
+  app.post('/api/tools/probe', async (req) => {
+    const b = (req.body ?? {}) as { text?: string; scope?: string };
+    const needle = String(b.text ?? '').trim();
+    if (!needle) return { ok: false, reason: 'text required' };
     const page = await getPage();
-    const { collectDom } = await import('./dom.js');
-    const { perform } = await import('./gemini.js');
-    const els = await collectDom(page);
-    const vp = page.viewportSize() ?? { width: 1280, height: 760 };
-    const before = page.url();
-    const action = {
-      act: String(body.act ?? 'click'),
-      ref: body.ref == null ? undefined : Number(body.ref),
-      x: body.x == null ? undefined : Number(body.x),
-      y: body.y == null ? undefined : Number(body.y),
-      dy: body.dy == null ? undefined : Number(body.dy),
-      sec: body.sec == null ? undefined : Number(body.sec),
-      text: body.text == null ? undefined : String(body.text),
-      key: body.key == null ? undefined : String(body.key),
-      url: body.url == null ? undefined : String(body.url),
-    } as Parameters<typeof perform>[1];
-    const started = Date.now();
-    const out = await perform(
-      page,
-      action,
-      els,
-      vp,
-      async (ms: number) => {
-        await page.waitForTimeout(ms);
-      },
-      Math.min(3000, Number(body.delayMs ?? 700))
-    );
-    return {
-      ...out,
-      elapsedMs: Date.now() - started,
-      urlBefore: before,
-      urlAfter: page.url(),
-      elementCount: els.length,
-    };
+    const found = (await page
+      .evaluate(
+        `(() => {
+          const scope = ${JSON.stringify(b.scope ?? '')};
+          let root = document.body;
+          if (scope) { try { root = document.querySelector(scope) || document.body; } catch {} }
+          const needle = ${JSON.stringify(needle.toLowerCase())};
+          const out = [];
+          const w = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+          let n = w.currentNode;
+          while (n && out.length < 10) {
+            if (n.childElementCount <= 2) {
+              const t = (n.textContent || '').replace(/\\s+/g, ' ').trim();
+              if (t && t.toLowerCase().indexOf(needle) >= 0) {
+                const r = n.getBoundingClientRect();
+                if (r.width > 0 && r.height > 0) out.push({ text: t.slice(0, 90), y: Math.round(r.top) });
+              }
+            }
+            n = w.nextNode();
+          }
+          return out;
+        })()`
+      )
+      .catch(() => [])) as { text: string; y: number }[];
+    return { ok: true, matches: found, count: found.length };
+  });
+
+  /* Живая проверка робота: на страницу добавляется временный блок с текстом
+   * из правила и кнопкой. Наблюдатель должен поймать его и нажать — так видно,
+   * что механизм работает, ещё до появления настоящего слота. Блок удаляется
+   * сам и не отправляет никаких запросов на сайт. */
+  app.post('/api/tools/simulate', async () => {
+    const r = activeRule();
+    if (!r) return { ok: false, reason: 'Сначала обучите робота' };
+    if (!engine.snapshot().running) {
+      return { ok: false, reason: 'Сначала запустите наблюдение — иначе ловить некому' };
+    }
+    const page = await getPage();
+    const clickLabel = r.clickText || 'Записаться';
+    try {
+      await page.evaluate(
+        `(() => {
+          document.querySelectorAll('[data-sem-sim]').forEach((n) => n.remove());
+          const box = document.createElement('div');
+          box.setAttribute('data-sem-sim', '1');
+          box.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:2147483647;'
+            + 'background:#0b1017;color:#e8eef6;border:2px solid #22c55e;border-radius:10px;'
+            + 'padding:10px 12px;font:13px system-ui';
+          const t = document.createElement('span');
+          t.textContent = ${JSON.stringify(r.watchText)};
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.textContent = ${JSON.stringify(clickLabel)};
+          b.style.cssText = 'margin-left:10px;padding:4px 10px;cursor:pointer';
+          b.addEventListener('click', () => {
+            b.textContent = 'нажато роботом ✓';
+            b.disabled = true;
+          });
+          box.appendChild(t);
+          box.appendChild(b);
+          document.body.appendChild(box);
+          setTimeout(() => box.remove(), 20000);
+          return true;
+        })()`
+      );
+      log('info', 'CONTROL', `🧪 Проверка вживую: на страницу добавлен тестовый блок «${r.watchText}»`);
+      return { ok: true, watchText: r.watchText, clickText: clickLabel };
+    } catch (e) {
+      return { ok: false, reason: String(e).slice(0, 160) };
+    }
   });
 
   app.post('/api/ai/test', async () => {
@@ -522,35 +478,10 @@ export async function buildServer(engine: Engine): Promise<void> {
     const s = getAllSettings();
     if (!s.aiApiKey) return { ok: false, reason: 'Ключ не задан', models: [] };
     const { listModels } = await import('./gemini.js');
-    return listModels({
-      key: String(s.aiApiKey),
-      baseUrl: String(s.aiBaseUrl || ''),
-    });
+    return listModels({ key: String(s.aiApiKey), baseUrl: String(s.aiBaseUrl || '') });
   });
 
-  app.post('/api/control', async (req, reply) => {
-    const { cmd } = ((req.body ?? {}) as { cmd?: string }) ?? {};
-    switch (cmd) {
-      case 'start':
-        await engine.start();
-        break;
-      case 'stop':
-        engine.stop();
-        break;
-      case 'pause':
-        engine.pause();
-        break;
-      case 'resume':
-        engine.resume();
-        break;
-      case 'test-login':
-        return { ok: await engine.testLogin() };
-      default:
-        reply.code(400);
-        return { ok: false, error: 'unknown command' };
-    }
-    return { ok: true, snap: engine.snapshot() };
-  });
+  /* ---------------- websocket ---------------- */
 
   const wss = new WebSocketServer({ noServer: true });
   app.server.on('upgrade', (req, socket, head) => {
@@ -565,6 +496,7 @@ export async function buildServer(engine: Engine): Promise<void> {
       socket.destroy();
     }
   });
+
   wss.on('connection', (ws) => {
     ws.send(JSON.stringify({ type: 'status', snap: engine.snapshot() }));
     const onFeed = (item: unknown): void => {
@@ -583,27 +515,11 @@ export async function buildServer(engine: Engine): Promise<void> {
     };
     bus.on('feed', onFeed);
     bus.on('status', onStatus);
-    const onAgent = (st: unknown): void => {
-      try {
-        ws.send(JSON.stringify({ type: 'agent', st }));
-      } catch {
-        /* closed */
-      }
-    };
-    bus.on('agent', onAgent);
     ws.on('close', () => {
       bus.off('feed', onFeed);
       bus.off('status', onStatus);
-      bus.off('agent', onAgent);
     });
   });
 
   await app.listen({ port: PORT, host: HOST });
-
-  /* Пока идёт обучение — сервер сам держит панель на текущей странице VNC
-     (после каждого перехода на новую страницу скрипт внедряется заново). */
-  const hb = setInterval(() => {
-    void picker.heartbeat();
-  }, 2000);
-  hb.unref?.();
 }

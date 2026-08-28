@@ -4,22 +4,22 @@ const $ = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
 
 const COLORS = {
-  RUNNING: '#22c55e', STARTING: '#38bdf8', WAITING: '#eab308',
-  AUTH_REQUIRED: '#f59e0b', SECURITY_VERIFICATION_WAIT: '#38bdf8',
-  MANUAL_REVIEW: '#f97316', ERROR: '#ef4444', STOPPED: '#6b7280',
+  RUNNING: '#22c55e',
+  WAITING: '#eab308',
+  AUTH_REQUIRED: '#f59e0b',
+  ERROR: '#ef4444',
+  STOPPED: '#6b7280',
 };
-const CAT = { SYSTEM: '⚙️', CONTROL: '🎛', WORKFLOW: '📋', AUTH: '🔐', SECURITY: '🛡' };
+const CAT = { SYSTEM: '⚙️', CONTROL: '🎛', WORKFLOW: '🎯', AUTH: '🔐' };
 
 let snap = null;
+let rule = null;
 let chart = null;
 let ws = null, wsTimer = null;
 let journalCat = '';
-/* Агенттің нақты күйі: сервер оны /api/ai/state және ws «agent» арқылы береді.
- * СТАРТ/СТОП батырмалары engine.running-ке емес, осыған қарайды. */
-let agentBusy = false;
 
 /* ---------------- utils ---------------- */
-function toast(t, ms = 2600) {
+function toast(t, ms = 2800) {
   const el = $('#toast');
   el.textContent = t;
   el.classList.add('show');
@@ -43,21 +43,25 @@ function dur(sec) {
   if (m < 60) return m + ' мин';
   return Math.floor(m / 60) + ' ч ' + (m % 60) + ' м';
 }
-
-/* ---------------- status ---------------- */
+/* Реакция — главный показатель качества, поэтому показываем её честно. */
+function ms(v) {
+  if (v == null || v === 0) return '—';
+  return v < 1000 ? v + ' мс' : (v / 1000).toFixed(2) + ' с';
+}
 function setText(sel, val) {
   const el = $(sel);
   if (el && el.textContent !== String(val)) el.textContent = val;
 }
 
+/* ---------------- status ---------------- */
 function renderStatus() {
   if (!snap) return;
   const color = COLORS[snap.state] || '#6b7280';
-  const live = snap.state === 'RUNNING' || snap.state === 'STARTING';
+  const live = snap.state === 'RUNNING';
 
   setText('#stateRu', snap.emoji + ' ' + snap.stateRu);
-  setText('#stateSub', snap.paused && snap.running
-    ? 'На паузе' : (live ? 'В работе · ' + dur(snap.uptimeSec) : 'Ожидание команды'));
+  setText('#stateSub', snap.step || (live ? 'Наблюдаю' : 'Ожидание команды'));
+  setText('#stateBadge', live ? 'СЛЕДИТ' : snap.stateRu.toUpperCase());
 
   $('#bigOrb').classList.toggle('live', live);
   $('#brandOrb').classList.toggle('live', live);
@@ -66,41 +70,53 @@ function renderStatus() {
     el.style.borderColor = color;
   });
 
-  setText('#modeBadge', snap.mode === 'ai' ? 'ИИ-АГЕНТ' : snap.mode === 'simulation' ? 'ДЕМО' : 'БОЕВОЙ');
-  setText('#kToday', snap.processedToday);
+  setText('#kToday', snap.caughtToday);
+  setText('#kScans', snap.scans > 999 ? Math.round(snap.scans / 1000) + 'k' : snap.scans);
   setText('#kUp', live ? dur(snap.uptimeSec) : '—');
 
-  syncRunButtons();
+  const start = $('#btnStart');
+  const stop = $('#btnStop');
+  if (start && stop) {
+    start.disabled = live;
+    start.classList.toggle('active-glow', !live);
+    start.textContent = live ? '👁 Следит…' : '▶ СЛЕДИТЬ';
+    /* СТОП всегда доступен: залипшее состояние должно сбрасываться одним нажатием. */
+    stop.disabled = false;
+    stop.classList.toggle('active-glow', live);
+  }
 
-  const alert = ['AUTH_REQUIRED', 'MANUAL_REVIEW', 'ERROR'].includes(snap.state);
+  const alert = ['AUTH_REQUIRED', 'ERROR'].includes(snap.state);
   $$('.tab[data-tab="vnc"]').forEach((b) => b.classList.toggle('alert', alert));
 }
 
-/* СТАРТ пен СТОП екеуі де әрқашан басылады: СТОП — агентті де, циклді де
- * тоқтатады, сондықтан «Агент работает» деген күйде қатып қалу мүмкін емес. */
-function syncRunButtons() {
-  const run = $('#btnAiRun');
-  const stop = $('#btnAiStop');
-  if (!run || !stop) return;
-  const busy = agentBusy || Boolean(snap && snap.running);
-  run.disabled = busy;
-  run.classList.toggle('active-glow', !busy);
-  run.textContent = busy ? '⏳ Работает…' : '▶ СТАРТ';
-  stop.disabled = false;
-  stop.classList.toggle('active-glow', busy);
+/* ---------------- rule ---------------- */
+function renderRule() {
+  const box = $('#ruleBox');
+  const actions = $('#ruleActions');
+  if (!box) return;
+  if (!rule) {
+    box.innerHTML = 'Правило пока не выучено. Откройте нужную страницу во вкладке <b>Экран</b>, опишите задачу выше и нажмите «Обучить».';
+    if (actions) actions.style.display = 'none';
+    return;
+  }
+  const conf = rule.confirm && rule.confirm.length
+    ? rule.confirm.map((s) => esc(s.text || s.selector || '?')).join(' → ')
+    : 'не требуется';
+  const scopeRu = { row: 'в той же строке', self: 'сам найденный элемент', document: 'в любом месте страницы' };
+  box.innerHTML = `
+    <div class="ai-task">👁 Ждёт текст: <b>${esc(rule.watchText)}</b>${rule.watchScope ? ` <span style="opacity:.6">в ${esc(rule.watchScope)}</span>` : ''}</div>
+    <div class="ai-act">🖱 Нажимает: <b>${esc(rule.clickText || rule.clickSelector || 'первую кнопку')}</b> — ${scopeRu[rule.clickScope] || rule.clickScope}</div>
+    <div class="ai-act">✅ Подтверждение: ${conf}</div>
+    <div class="hint" style="margin-top:8px">Сработало успешно: <b>${rule.successCount}</b> · не подтвердилось: ${rule.failCount}</div>`;
+  if (actions) actions.style.display = '';
 }
 
 /* ---------------- feed ---------------- */
 function feedRow(it) {
   const d = document.createElement('div');
   d.className = 'feed-item ' + it.level;
-  let shot = '';
-  try {
-    const m = it.meta ? JSON.parse(it.meta) : null;
-    if (m && m.screenshot) shot = `<img class="shot-thumb" loading="lazy" src="/shots/${m.screenshot}">`;
-  } catch { /* plain */ }
   d.innerHTML = `<span class="fi-time">${hhmmss(it.ts)}</span>
-    <span class="fi-msg">${CAT[it.category] ? CAT[it.category] + ' ' : ''}${esc(it.message)}${shot}</span>`;
+    <span class="fi-msg">${CAT[it.category] ? CAT[it.category] + ' ' : ''}${esc(it.message)}</span>`;
   return d;
 }
 function pushFeed(it) {
@@ -119,7 +135,8 @@ async function loadJournal() {
 }
 
 /* ---------------- analytics ---------------- */
-/* Chart.js әдейі кейін жүктеледі: бастапқы бет жеңіл болады. */
+/* Chart.js подгружается только при открытии «Статистики»: первый экран должен
+ * быть максимально быстрым. */
 let chartLibPromise = null;
 function loadChartLib() {
   if (window.Chart) return Promise.resolve(window.Chart);
@@ -137,42 +154,40 @@ function loadChartLib() {
 
 async function loadStats() {
   const a = await api('/api/analytics');
-  $('#stToday').textContent = a.today;
-  $('#stWeek').textContent = a.week;
-  $('#stTotal').textContent = a.total;
-  $('#stAvg').textContent = a.avgDurationMs ? (a.avgDurationMs / 1000).toFixed(1) + ' с' : '—';
-  setText('#kWeek', a.week);
-  setText('#kAi', a.aiToday ?? 0);
+  setText('#stToday', a.today);
+  setText('#stFailed', a.failedToday);
+  setText('#stWeek', a.week);
+  $('#stAvg').textContent = ms(a.avgReactionMs);
+  setText('#kBest', ms(a.bestReactionMs));
 
   const tb = $('#recentBody');
-  tb.innerHTML = '';
-  a.recent.forEach((r) => {
-    const tr = document.createElement('tr');
-    const what = r.action === 'ai-task' ? '🤖 Задача ИИ' : '#' + esc(r.application_id);
-    tr.innerHTML = `<td>${dmhm(r.ts)}</td><td>${what}</td>
-      <td><span class="tag">${r.result === 'done' ? 'выполнено' : 'принята'}</span></td>
-      <td>${r.duration_ms ? (r.duration_ms / 1000).toFixed(1) + ' с' : '—'}</td>`;
-    tb.appendChild(tr);
-  });
+  if (tb) {
+    tb.innerHTML = '';
+    a.recent.forEach((r) => {
+      const tr = document.createElement('tr');
+      const okTag = r.result === 'done'
+        ? '<span class="tag">выполнено</span>'
+        : '<span class="tag" style="background:rgba(239,68,68,.12);color:#ffa3a3">не подтвердилось</span>';
+      tr.innerHTML = `<td>${dmhm(r.ts)}</td><td>${esc(r.label)}</td><td>${okTag}</td><td>${ms(r.reactionMs)}</td>`;
+      tb.appendChild(tr);
+    });
+  }
 
   const labels = a.series24h.map((p) => p.hour.slice(11, 16));
   const data = a.series24h.map((p) => p.count);
   const sig = labels.join(',') + '|' + data.join(',');
   if (chart && chart.__sig === sig) return;
 
-  /* Диаграмма — тек «Статистика» көрініп тұрғанда салынады. */
   const box = $('#chart24');
   if (!box || !box.offsetParent) return;
-
   let Lib;
   try { Lib = await loadChartLib(); } catch { return; }
   if (chart) chart.destroy();
   chart = new Lib(box.getContext('2d'), {
     type: 'bar',
-    data: { labels, datasets: [{ data, backgroundColor: 'rgba(79,140,255,.55)', borderRadius: 6, maxBarThickness: 22 }] },
+    data: { labels, datasets: [{ data, backgroundColor: 'rgba(34,197,94,.55)', borderRadius: 6, maxBarThickness: 22 }] },
     options: {
-      responsive: true, maintainAspectRatio: false,
-      animation: false,
+      responsive: true, maintainAspectRatio: false, animation: false,
       plugins: { legend: { display: false } },
       scales: {
         x: { ticks: { color: '#8794a5', font: { size: 9 } }, grid: { display: false } },
@@ -194,8 +209,15 @@ async function loadSettings(force) {
       else el.value = s[el.name] ?? '';
     });
   });
-  const sp = $('#speedRange');
-  if (sp) { sp.value = s.speed; $('#speedVal').textContent = '×' + Number(s.speed); }
+
+  /* Задача живёт вне формы (обучение — не сохранение настроек). */
+  const task = document.querySelector('textarea[name=taskText]');
+  if (task && task !== document.activeElement && !task.value) task.value = s.taskText ?? '';
+
+  const scan = $('#scanRange');
+  if (scan) { scan.value = s.scanIntervalMs; setText('#scanVal', s.scanIntervalMs); }
+  const conf = $('#confRange');
+  if (conf) { conf.value = s.confirmDelayMs; setText('#confVal', s.confirmDelayMs); }
 
   /* Секреты сервер наружу не отдаёт, поэтому поле остаётся пустым —
    * без этой подписи кажется, что пароль не сохранился. */
@@ -206,71 +228,36 @@ async function loadSettings(force) {
     const input = document.querySelector(`[name=${tag.dataset.stateFor}]`);
     if (input && saved && !input.value) input.placeholder = 'Сохранён — оставьте пустым или введите новый';
   });
-
   const ks = $('#keyState');
   if (ks) {
     ks.textContent = s.aiApiKeySet ? '· сохранён' : '· не задан';
     ks.className = 'key-state ' + (s.aiApiKeySet ? 'ok' : 'no');
   }
-  const keyInput = document.querySelector('input[name=aiApiKey]');
-  if (keyInput && s.aiApiKeySet && !keyInput.value) {
-    keyInput.placeholder = 'Ключ сохранён — оставьте пустым или введите новый';
-  }
   markProvider(s.aiBaseUrl || '');
 
-  const loop = $('#loopOn');
-  if (loop) {
-    const on = Number(s.aiIntervalMin) > 0;
-    if (loop !== document.activeElement) loop.checked = on;
-    const lf = $('#loopFields');
-    if (lf) lf.style.display = on ? '' : 'none';
-  }
-
-  // Загружаем список моделей, если есть ключ
   if (s.aiApiKeySet) {
     try {
       const r = await api('/api/models');
-      if (r.ok && r.models) {
-        const datalist = document.getElementById('modelList');
-        if (datalist) {
-          // Сохраняем текущее значение
-          const current = document.querySelector('input[name=aiModel]')?.value || '';
-          datalist.innerHTML = '';
-          // Показываем только модели с generateContent (фильтруем на сервере)
-          r.models.forEach((m) => {
-            const opt = document.createElement('option');
-            opt.value = m;
-            datalist.appendChild(opt);
-          });
-          // Восстанавливаем значение, если оно было
-          const modelInput = document.querySelector('input[name=aiModel]');
-          if (modelInput && current) modelInput.value = current;
-        }
+      const dl = document.getElementById('modelList');
+      if (r.ok && r.models && dl) {
+        dl.innerHTML = '';
+        r.models.forEach((m) => {
+          const o = document.createElement('option');
+          o.value = m;
+          dl.appendChild(o);
+        });
       }
-    } catch (e) {
-      // Тихая ошибка — список не обязателен
-    }
+    } catch { /* список не обязателен */ }
   }
 }
 
-let vncLoaded = false;
-async function loadVnc() {
-  const el = $('#vncWrap');
-  if (!el) return;
-  if (vncLoaded && el.querySelector('iframe')) return;
-  el.innerHTML = '<div class="hint" style="padding:16px">⏳ Подключаюсь к экрану…</div>';
-  const meta = await api('/api/meta').catch(() => ({}));
-  if (meta.vncUrl) {
-    el.innerHTML = `<iframe src="${meta.vncUrl}" allow="clipboard-read; clipboard-write"></iframe>`;
-    vncLoaded = true;
-  } else {
-    el.innerHTML =
-      '<div class="hint" style="padding:16px">Экран пока недоступен: noVNC не запущен.<br><br>' +
-      '<button class="btn ghost block" id="btnVncRetry">Повторить</button></div>';
-    vncLoaded = false;
-    const rb = $('#btnVncRetry');
-    if (rb) rb.addEventListener('click', () => loadVnc().catch(() => {}));
-  }
+function markProvider(base) {
+  const b = String(base || '').trim();
+  const known = ['', 'https://api.openai.com/v1', 'https://openrouter.ai/api/v1'];
+  $$('#provSeg .seg-btn').forEach((btn) => {
+    const bb = btn.dataset.base;
+    btn.classList.toggle('on', bb === 'custom' ? !known.includes(b) : bb === b);
+  });
 }
 
 function bindSaveForms() {
@@ -304,155 +291,187 @@ function bindSaveForms() {
   });
 }
 
-function markProvider(base) {
-  const b = String(base || '').trim();
-  const known = ['', 'https://api.openai.com/v1', 'https://openrouter.ai/api/v1'];
-  $$('#provSeg .seg-btn').forEach((btn) => {
-    const bb = btn.dataset.base;
-    const active = bb === 'custom' ? !known.includes(b) : bb === b;
-    btn.classList.toggle('on', active);
-  });
-}
-
-$$('#provSeg .seg-btn').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    const base = btn.dataset.base;
-    const baseInput = document.querySelector('input[name=aiBaseUrl]');
-    const modelInput = document.querySelector('input[name=aiModel]');
-    if (base !== 'custom') {
-      baseInput.value = base;
-      baseInput.dataset.dirty = '1';
-      if (btn.dataset.model) { modelInput.value = btn.dataset.model; modelInput.dataset.dirty = '1'; }
-    }
-    markProvider(base === 'custom' ? 'custom-x' : base);
-    if (base === 'custom') baseInput.focus();
-  });
-});
-
-const loopChk = $('#loopOn');
-if (loopChk) {
-  loopChk.addEventListener('change', () => {
-    const lf = $('#loopFields');
-    if (lf) lf.style.display = loopChk.checked ? '' : 'none';
-    const iv = document.querySelector('input[name=aiIntervalMin]');
-    if (iv) {
-      if (loopChk.checked && Number(iv.value) <= 0) iv.value = '5';
-      if (!loopChk.checked) iv.value = '0';
-      iv.dataset.dirty = '1';
-    }
-  });
+/* ---------------- vnc ---------------- */
+let vncLoaded = false;
+async function loadVnc() {
+  const el = $('#vncWrap');
+  if (!el) return;
+  if (vncLoaded && el.querySelector('iframe')) return;
+  el.innerHTML = '<div class="hint" style="padding:16px">⏳ Подключаюсь к экрану…</div>';
+  const meta = await api('/api/meta').catch(() => ({}));
+  if (meta.vncUrl) {
+    el.innerHTML = `<iframe src="${meta.vncUrl}" allow="clipboard-read; clipboard-write"></iframe>`;
+    vncLoaded = true;
+  } else {
+    el.innerHTML =
+      '<div class="hint" style="padding:16px">Экран пока недоступен: noVNC не запущен.<br><br>' +
+      '<button class="btn ghost block" id="btnVncRetry">Повторить</button></div>';
+    vncLoaded = false;
+    const rb = $('#btnVncRetry');
+    if (rb) rb.addEventListener('click', () => loadVnc().catch(() => {}));
+  }
 }
 
 /* ---------------- control ---------------- */
-async function control(cmd) {
-  try {
-    const r = await api('/api/control', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ cmd }),
-    });
-    if (r.snap) { snap = r.snap; renderStatus(); }
-  } catch (e) { toast('Ошибка: ' + e.message); }
+/* Адрес открытой страницы виден сразу: без него непонятно, за чем робот следит. */
+function renderPage() {
+  const box = $('#pageBox');
+  if (!box || !snap) return;
+  const u = snap.watchUrl;
+  box.innerHTML = u && u !== 'about:blank'
+    ? `Открыто: <b style="word-break:break-all">${esc(u)}</b>`
+    : '⚠️ Страница не открыта. Укажите адрес ниже или откройте её вручную во вкладке <b>Экран</b>.';
 }
+
 function pullStatus() {
-  api('/api/status').then((d) => { snap = d.snap; renderStatus(); }).catch(() => {});
+  api('/api/status')
+    .then((d) => { snap = d.snap; rule = d.rule; renderStatus(); renderRule(); renderPage(); })
+    .catch(() => {});
 }
 
-/* ---------------- AI agent ---------------- */
-function renderAgent(st) {
-  agentBusy = Boolean(st && st.running);
-  syncRunButtons();
-  const html = (!st || (!st.running && !st.lastAction)) ? '' : `
-    <div class="ai-live-head">${st.running ? '<span class="ai-dot"></span> Агент работает' : '⏹ Остановлен'}
-      ${st.step ? `<span class="ai-step">шаг ${st.step}</span>` : ''}</div>
-    ${st.task ? `<div class="ai-task">🎯 ${esc(st.task)}</div>` : ''}
-    ${st.lastAction ? `<div class="ai-act">${esc(st.lastAction)}</div>` : ''}`;
-  const el = $('#aiLive'); if (el) el.innerHTML = html;
-}
-async function refreshAgent() {
-  try { renderAgent(await api('/api/ai/state')); } catch { /* ignore */ }
-}
-
-/** СТОП: агентті де, тұрақты циклді де бірден тоқтатады. */
-async function stopEverything() {
-  agentBusy = false;
-  syncRunButtons();
+async function openPage() {
+  const url = ($('#openUrl')?.value || '').trim();
+  if (!url) { toast('Укажите адрес'); return; }
+  const btn = $('#btnOpen');
+  const old = btn.textContent;
+  btn.disabled = true; btn.textContent = '⏳ Открываю…';
   try {
-    await api('/api/ai/stop', { method: 'POST' });
-  } catch { /* агент жүрмеген болуы мүмкін */ }
-  await control('stop');
-  toast('⏹ Остановлено');
-  refreshAgent();
-}
-
-async function runTask(inputSel) {
-  const field = document.querySelector(inputSel);
-  const task = (field?.value || '').trim();
-  if (!task) { toast('Напишите задачу'); return; }
-  try {
-    await api('/api/settings', {
+    const r = await api('/api/tools/open', {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ aiInstruction: task }),
+      body: JSON.stringify({ url }),
     });
-  } catch { /* сохраним при следующем Save */ }
-  agentBusy = true;
-  syncRunButtons();
+    toast(r.ok ? '🌐 Открыто — доведите шаги во вкладке «Экран»' : '❌ ' + (r.reason || 'Ошибка'));
+  } catch (e) { toast('Ошибка: ' + e.message); }
+  btn.disabled = false; btn.textContent = old;
+  pullStatus();
+}
+
+async function learn() {
+  const field = document.querySelector('textarea[name=taskText]');
+  const task = (field?.value || '').trim();
+  if (!task) { toast('Опишите задачу словами'); return; }
+  const btn = $('#btnLearn');
+  const out = $('#learnOut');
+  const old = btn.textContent;
+  btn.disabled = true; btn.textContent = '🎓 Смотрю на страницу…';
+  out.textContent = 'Один запрос к модели. Дальше робот работает без неё.';
   try {
-    const r = await api('/api/ai/run', {
+    const r = await api('/api/learn', {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ task }),
     });
-    if (!r.ok) toast('❌ ' + (r.reason || 'Ошибка'));
-    else if (r.aborted) toast('⏹ Остановлено');
-    else if (r.done) toast(`✅ Готово за ${r.steps} шаг(ов)`);
-    else toast('⚠️ ' + (r.reason || 'Не завершено'));
+    if (!r.ok) {
+      out.innerHTML = '❌ ' + esc(r.reason || 'Не удалось выучить');
+      toast('❌ ' + (r.reason || 'Ошибка'));
+    } else {
+      out.innerHTML = '✅ Правило выучено' + (r.note ? '<br>' + esc(r.note) : '');
+      toast('✅ Правило выучено');
+      rule = r.rule;
+      renderRule();
+    }
+  } catch (e) {
+    out.textContent = 'Ошибка: ' + e.message;
+  }
+  btn.disabled = false; btn.textContent = old;
+  pullStatus();
+}
+
+/* Проверка «видно ли условие сейчас» — без модели и без клика. */
+async function probe() {
+  if (!rule) return;
+  const out = $('#probeOut');
+  out.textContent = '⏳ Смотрю страницу…';
+  try {
+    const r = await api('/api/tools/probe', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: rule.watchText, scope: rule.watchScope }),
+    });
+    if (!r.ok) { out.textContent = '❌ ' + (r.reason || 'ошибка'); return; }
+    if (r.count === 0) {
+      out.innerHTML = `⏳ Текст «${esc(rule.watchText)}» на странице сейчас <b>не найден</b> — робот будет ждать его появления. Это нормально.`;
+    } else {
+      out.innerHTML = `⚠️ Текст найден <b>${r.count}</b> раз(а) уже сейчас:<br>`
+        + r.matches.map((m) => '• ' + esc(m.text)).join('<br>')
+        + '<br><br>Если это постоянный текст страницы, робот сработает сразу и зря — уточните задачу и обучите заново.';
+    }
+  } catch (e) { out.textContent = 'Ошибка: ' + e.message; }
+}
+
+/* Тест вживую: подсовываем роботу условие и смотрим, поймает ли он его.
+ * Настоящий сайт при этом не трогается — блок только в браузере робота. */
+async function simulate() {
+  const out = $('#probeOut');
+  out.textContent = '⏳ Подставляю условие…';
+  try {
+    const r = await api('/api/tools/simulate', { method: 'POST' });
+    if (!r.ok) { out.innerHTML = '❌ ' + esc(r.reason || 'ошибка'); return; }
+    out.innerHTML = `🧪 На страницу добавлен блок «${esc(r.watchText)}» с кнопкой «${esc(r.clickText)}».<br>`
+      + 'Смотрите <b>Журнал</b>: должна появиться запись «Поймано за N мс». Блок исчезнет сам через 20 секунд.';
+    setTimeout(() => { loadStats().catch(() => {}); pullStatus(); }, 2500);
+  } catch (e) { out.textContent = 'Ошибка: ' + e.message; }
+}
+
+async function startWatch() {
+  try {
+    const r = await api('/api/watch/start', { method: 'POST' });
+    snap = r.snap; renderStatus();
+    toast(r.ok ? '👁 Наблюдение началось' : '❌ Не удалось запустить — смотрите журнал');
   } catch (e) { toast('Ошибка: ' + e.message); }
-  agentBusy = false;
-  syncRunButtons();
-  refreshAgent(); loadStats().catch(() => {});
+}
+
+async function stopWatch() {
+  try {
+    const r = await api('/api/watch/stop', { method: 'POST' });
+    snap = r.snap; renderStatus();
+    toast('⏹ Остановлено');
+  } catch (e) { toast('Ошибка: ' + e.message); }
 }
 
 /* ---------------- help ---------------- */
 const HELP = {
-  ai: ['🤖 Команда агенту', `Одна задача — агент делает её и повторяет по расписанию.<br><br>
-<b>▶ Выполнить сейчас</b> — сделать один раз прямо сейчас.<br>
-<b>Повторять по расписанию</b> — включите и укажите интервал (например 5 минут). Затем ▶ Старт сверху — агент будет работать сам круглосуточно.<br>
-<b>Лимит шагов</b> — сколько действий максимум за один проход (защита от лишних расходов).<br><br>
-Пишите обычными словами:<br>
-• <i>«Войди на сайт: логин admin, пароль 12345»</i><br>
-• <i>«Открой список заявок и прими первую новую»</i><br>
-• <i>«Найди заявку №184, нажми Принять и подтверди в окне»</i><br><br>
-Ниже кнопки видно каждый шаг агента, а во вкладке <b>Экран</b> — картинку браузера.<br><br>
-Нужен ключ Gemini — см. карточку «Доступ к Gemini».`],
-  aikey: ['🔑 Доступ к модели', `<b>Google Gemini (по умолчанию):</b><br>
-1. Откройте <b>aistudio.google.com/apikey</b><br>
-2. Войдите Google-аккаунтом<br>
-3. «Create API key» → скопируйте (начинается на <code>AIza…</code>)<br>
-4. Вставьте здесь → <b>Сохранить</b> → <b>Проверить ключ</b><br><br>
-5. Base URL оставьте пустым<br><br>
-<b>Другой провайдер</b> (OpenRouter, свой прокси, локальная модель):<br>
-• Base URL: <code>https://openrouter.ai/api/v1</code><br>
-• Модель: <code>google/gemini-2.5-flash</code> или <code>anthropic/claude-sonnet-4.5</code><br>
-• Ключ: ваш <code>sk-…</code><br><br>
-Модель нужно выбирать <b>с поддержкой картинок</b> (vision) — агент работает по скриншоту.
-Название пишите точно как у провайдера. Ключ хранится только на вашем сервере.`],
-  loop: ['♻️ Автозапуск', `Если включено — после перезапуска сервера агент поднимется сам и продолжит работать по вашей задаче.<br><br>
-«Другие режимы» нужны редко: обычный режим — <b>🤖 ИИ-агент</b>.`],
-  site: ['🌐 Сайт и вход', `Адрес сайта, где работает агент, и данные для входа.<br><br>
-Если сессия истечёт — бот войдёт сам по этим данным. Если понадобится код из SMS, вы получите уведомление, введёте код во вкладке <b>Экран</b>, и агент продолжит.<br><br>
+  page: ['🌐 Страница', `Робот работает с <b>одной уже открытой страницей</b> и никогда её не перезагружает.<br><br>
+Порядок: откройте адрес здесь или во вкладке <b>Экран</b>, затем <b>сами</b> пройдите все шаги (пункт, дата, транспорт) до момента, где нужно ждать свободное место.<br><br>
+Кнопка «Открыть» заблокирована во время наблюдения: переход сбросил бы заполненные шаги.`],
+  learn: ['🎓 Обучение', `Робот учится <b>один раз</b>, потом работает сам.<br><br>
+<b>Порядок:</b><br>
+1. Вкладка <b>Экран</b> — сами доведите страницу до состояния ожидания (выберите пункт, дату, всё что нужно).<br>
+2. Здесь опишите словами, чего ждать и что нажать.<br>
+3. «Обучить» — модель посмотрит на страницу и составит правило.<br><br>
+<b>Пример задачи:</b><br>
+<i>«Когда появится Свободно — нажми в этой строке Записаться, потом подтверди в окне»</i><br><br>
+Модель вызывается только в этот момент. В работе робот к интернету за ИИ не обращается — поэтому реакция миллисекунды, а не секунды.`],
+  rule: ['👁 Правило', `Что именно будет делать робот:<br><br>
+<b>Ждёт текст</b> — появление этой надписи означает «пора».<br>
+<b>Нажимает</b> — кнопка в той же строке, где найден текст.<br>
+<b>Подтверждение</b> — шаги после первого клика.<br><br>
+Кнопка <b>Проверить</b> смотрит страницу прямо сейчас и без клика. Если условие уже видно на пустой странице — правило неточное, робот сработает зря. Тогда уточните задачу и обучите заново.`],
+  watch: ['👁 Наблюдение', `Робот следит за <b>уже открытой</b> страницей.<br><br>
+<b>Страница не перезагружается никогда</b> — иначе заполненные шаги пришлось бы вводить заново.<br><br>
+Наблюдение работает внутри страницы: как только нужный элемент появляется, клик происходит в тот же момент. Плюс резервная проверка по таймеру.<br><br>
+<b>СТОП</b> доступен всегда и останавливает всё сразу.`],
+  speed: ['⚡ Скорость', `<b>Проверка страницы</b> — резервный таймер. Основная реакция мгновенная: робот слушает изменения страницы напрямую. Меньшее значение даёт запас, но чуть сильнее нагружает браузер. 150 мс — хороший баланс.<br><br>
+<b>Пауза перед подтверждением</b> — 0 значит «жать сразу». Увеличьте, только если сайт не успевает открыть окно подтверждения.<br><br>
+Реальную скорость видно в <b>Статистике</b>: «Лучшая реакция» и «Ср. реакция» в миллисекундах.`],
+  mouse: ['🖱 Живая сессия', `Сайты выкидывают неактивных пользователей. Робот периодически двигает мышью и чуть прокручивает страницу туда-обратно.<br><br>
+Перезагрузки страницы <b>нет</b> — заполненные шаги остаются.<br><br>
+45 секунд подходит почти всем. Если сайт разлогинивает — уменьшите.`],
+  schedule: ['🕒 График работы', `<b>Круглосуточно</b> — робот следит всегда.<br><br>
+<b>По часам</b> — например с 9 до 21 (по Алматы). Вне графика наблюдение приостанавливается, но <b>страница остаётся открытой</b>, и утром работа продолжается с того же места.`],
+  aikey: ['🔑 Доступ к модели', `Ключ нужен <b>только для обучения</b> — один запрос на правило.<br><br>
+<b>Google Gemini:</b><br>
+1. aistudio.google.com/apikey<br>
+2. Create API key → скопируйте (<code>AIza…</code>)<br>
+3. Base URL оставьте пустым<br><br>
+<b>Другой провайдер:</b> укажите Base URL и модель с поддержкой картинок (vision).<br><br>
+<b>Проверить ключ</b> делает один реальный запрос: так видно не только «ключ верный», но и хватает ли квоты или депозита именно на эту модель.`],
+  site: ['🌐 Сайт и вход', `Эти данные нужны для уведомлений и подсказок. Робот работает с той страницей, которую вы открыли сами во вкладке «Экран» — он её не переоткрывает.<br><br>
 Пароль хранится только на вашем сервере.`],
-  schedule: ['🕒 График работы', `<b>Круглосуточно</b> — агент работает всегда.<br><br>
-<b>По часам</b> — например с 9 до 21 (по Алматы). Вне графика агент ставит паузу и закрывает браузер, чтобы сервер отдыхал, а утром поднимается сам.`],
-  behavior: ['⚙️ Поведение', `<b>Скорость</b> — множитель пауз: 0.5 быстрее, 2 медленнее и осторожнее.<br><br>
-<b>Пауза между действиями</b> — 800 мс похоже на человека.<br><br>
-<b>Keep-alive</b> — как часто напоминать сайту о себе, чтобы не разлогинило (180 сек).<br><br>
-<b>Скриншот-доказательство</b> — снимок после каждой принятой заявки, виден в Журнале.`],
-  telegram: ['📨 Уведомления', `Сообщим, если нужен вход, появилась проверка безопасности или требуется ваше внимание.<br><br>
-1. @BotFather → создайте бота → получите token<br>
+  telegram: ['📨 Уведомления', `Придёт сообщение при успешном захвате и когда подтверждение не прошло.<br><br>
+1. @BotFather → создайте бота → token<br>
 2. Напишите своему боту любое сообщение<br>
-3. @userinfobot → узнайте свой chat_id<br>
-4. Вставьте оба значения и сохраните.`],
-  reset: ['🧹 Обнулить статистику', `Удалит историю заявок и счётчики (сегодня / 7 дней / всего).<br><br>
-Журнал событий и настройки останутся. Полезно, если в статистике накопились тестовые запуски.`],
+3. @userinfobot → ваш chat_id`],
+  reset: ['🧹 Обнулить статистику', `Удалит историю захватов и счётчики правил.<br><br>
+Само правило и настройки останутся.`],
 };
 function openHelp(k) {
   const h = HELP[k];
@@ -472,7 +491,6 @@ function connectWs() {
       const d = JSON.parse(ev.data);
       if (d.type === 'feed') pushFeed(d.item);
       if (d.type === 'status') { snap = d.snap; renderStatus(); }
-      if (d.type === 'agent') renderAgent(d.st);
     } catch { /* ignore */ }
   };
   ws.onclose = () => { wsTimer = setTimeout(connectWs, 3000); };
@@ -488,37 +506,39 @@ $$('.tab').forEach((b) => {
     $$('.page').forEach((p) => p.classList.toggle('active', p.dataset.tab === t));
     window.scrollTo({ top: 0, behavior: 'smooth' });
     if (t === 'analytics') loadStats().catch(() => {});
-    if (t === 'settings') { loadSettings().catch(() => {}); refreshAgent(); }
+    if (t === 'settings') loadSettings().catch(() => {});
     if (t === 'vnc') loadVnc().catch(() => {});
     if (t === 'journal') loadJournal().catch(() => {});
   });
 });
 
-$('#btnAiStop').addEventListener('click', () => { stopEverything().catch(() => {}); });
+$('#btnOpen').addEventListener('click', () => openPage());
+$('#btnLearn').addEventListener('click', () => learn());
+$('#btnProbe').addEventListener('click', () => probe());
+$('#btnSim').addEventListener('click', () => simulate());
+$('#btnStart').addEventListener('click', () => startWatch());
+$('#btnStop').addEventListener('click', () => stopWatch());
 $('#btnLogout').addEventListener('click', () => { location.href = '/logout'; });
-
-$('#btnAiRun').addEventListener('click', () => runTask('textarea[name=aiInstruction]'));
 
 $('#btnAiTest').addEventListener('click', async () => {
   const out = $('#aiTestOut');
-  out.textContent = '⏳ Проверяю ключ и квоту…';
+  out.textContent = '⏳ Проверяю ключ и доступ к модели…';
   try {
     const r = await api('/api/ai/test', { method: 'POST' });
     if (!r.ok) { out.innerHTML = '❌ ' + esc(r.reason || 'Ключ не подошёл'); return; }
-    /* Ключ может быть верным, но дневная квота — исчерпана. Это разные вещи,
-     * и раньше панель показывала «работает», а агент падал с 429. */
+    /* Ключ может быть верным, но модель — платной или квота исчерпана.
+     * Это разные вещи, и раньше панель показывала просто «работает». */
     const quota = r.quotaOk === false
-      ? `<br>⛔ <b>${esc(r.quotaNote || 'квота исчерпана')}</b>`
+      ? `<br>⛔ <b>${esc(r.quotaNote || 'модель недоступна')}</b>`
       : r.quotaOk === true ? '<br>✅ ' + esc(r.quotaNote || '') : '';
     out.innerHTML =
-      `✅ Ключ работает · моделей: ${r.models}<br>Модель <b>${esc(r.model)}</b>: ${r.modelFound ? 'доступна' : 'не найдена в списке'}`
-      + quota
-      + `<br><span style="opacity:.65">${esc(r.base || '')}</span>`;
+      `✅ Ключ работает · моделей: ${r.models}<br>Модель <b>${esc(r.model)}</b>: ${r.modelFound ? 'есть в списке' : 'не найдена в списке'}`
+      + quota + `<br><span style="opacity:.65">${esc(r.base || '')}</span>`;
   } catch (e) { out.textContent = 'Ошибка: ' + e.message; }
 });
 
 $('#btnStatsReset').addEventListener('click', async () => {
-  if (!confirm('Обнулить статистику заявок?')) return;
+  if (!confirm('Обнулить статистику захватов?')) return;
   try {
     await api('/api/stats/reset', { method: 'POST' });
     toast('🧹 Статистика обнулена');
@@ -527,8 +547,25 @@ $('#btnStatsReset').addEventListener('click', async () => {
   } catch (e) { toast('Ошибка: ' + e.message); }
 });
 
-const sp = $('#speedRange');
-if (sp) sp.addEventListener('input', (e) => { $('#speedVal').textContent = '×' + e.target.value; });
+const scanR = $('#scanRange');
+if (scanR) scanR.addEventListener('input', (e) => setText('#scanVal', e.target.value));
+const confR = $('#confRange');
+if (confR) confR.addEventListener('input', (e) => setText('#confVal', e.target.value));
+
+$$('#provSeg .seg-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const base = btn.dataset.base;
+    const baseInput = document.querySelector('input[name=aiBaseUrl]');
+    const modelInput = document.querySelector('input[name=aiModel]');
+    if (base !== 'custom') {
+      baseInput.value = base;
+      baseInput.dataset.dirty = '1';
+      if (btn.dataset.model) { modelInput.value = btn.dataset.model; modelInput.dataset.dirty = '1'; }
+    }
+    markProvider(base === 'custom' ? 'custom-x' : base);
+    if (base === 'custom') baseInput.focus();
+  });
+});
 
 $$('#journalChips .chip').forEach((c) => {
   c.addEventListener('click', () => {
@@ -550,8 +587,5 @@ connectWs();
 pullStatus();
 loadStats().catch(() => {});
 loadSettings(true).catch(() => {});
-refreshAgent();
-setInterval(pullStatus, 12000);
-/* Агент күйін жиі сұраймыз: батырмалар нақты күйден кейін қалып қалмауы керек. */
-setInterval(() => { if (!document.hidden) refreshAgent(); }, 4000);
-setInterval(() => { if (!document.hidden) loadStats().catch(() => {}); }, 60000);
+setInterval(pullStatus, 5000);
+setInterval(() => { if (!document.hidden) loadStats().catch(() => {}); }, 30000);

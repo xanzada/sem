@@ -1,57 +1,61 @@
 import { db } from './db.js';
 
 export interface SemSettings {
-  mode: 'simulation' | 'live' | 'ai';
+  /* --- сайт және кіру --- */
   siteUrl: string;
-  listUrl: string;
   username: string;
   password: string;
-  loginSelectorsJson: string;
+
+  /* --- модель (ережені бір рет үйрену үшін ғана) --- */
   aiApiKey: string;
   aiModel: string;
   aiBaseUrl: string;
-  aiInstruction: string;
-  aiIntervalMin: number;
-  aiMaxSteps: number;
-  selectorsJson: string;
-  stepsJson: string;
-  speed: number;
-  actionDelayMs: number;
-  keepaliveSec: number;
-  securityTimeoutMin: number;
+
+  /* --- тапсырма мәтіні (оператор жазады, ереже осыдан үйреніледі) --- */
+  taskText: string;
+
+  /* --- жылдамдық --- */
+  /** Күзетші бетті қаншалық жиі тексереді, мс. Кіші сан = жылдам реакция. */
+  scanIntervalMs: number;
+  /** Растау қадамдары арасындағы пауза, мс. 0 — ең жылдам. */
+  confirmDelayMs: number;
+
+  /* --- сессияны тірі ұстау --- */
+  /** Тінтуірді қозғау аралығы, сек. Бетті ЖАҢАРТПАЙДЫ. */
+  mouseMoveSec: number;
+
+  /* --- график --- */
   scheduleEnabled: boolean;
   scheduleFrom: number;
   scheduleTo: number;
+
+  /* --- қосалқы --- */
   autostart: boolean;
-  evidenceShots: boolean;
   telegramToken: string;
   telegramChatId: string;
 }
 
 export const DEFAULT_SETTINGS: SemSettings = {
-  mode: 'simulation',
   siteUrl: '',
-  listUrl: '',
   username: '',
   password: '',
-  loginSelectorsJson: '',
+
   aiApiKey: '',
   aiModel: 'gemini-flash-latest',
   aiBaseUrl: '',
-  aiInstruction: '',
-  aiIntervalMin: 5,
-  aiMaxSteps: 20,
-  selectorsJson: '',
-  stepsJson: '',
-  speed: 1,
-  actionDelayMs: 800,
-  keepaliveSec: 180,
-  securityTimeoutMin: 30,
+
+  taskText: '',
+
+  scanIntervalMs: 150,
+  confirmDelayMs: 0,
+
+  mouseMoveSec: 45,
+
   scheduleEnabled: false,
   scheduleFrom: 9,
   scheduleTo: 21,
-  autostart: true,
-  evidenceShots: true,
+
+  autostart: false,
   telegramToken: '',
   telegramChatId: '',
 };
@@ -59,32 +63,38 @@ export const DEFAULT_SETTINGS: SemSettings = {
 export const SETTINGS_KEYS = Object.keys(DEFAULT_SETTINGS) as (keyof SemSettings)[];
 
 const ENV_KEYS: Partial<Record<keyof SemSettings, string>> = {
-  mode: 'SEM_MODE',
   siteUrl: 'SITE_URL',
-  listUrl: 'SITE_LIST_URL',
   username: 'SITE_USERNAME',
   password: 'SITE_PASSWORD',
-  loginSelectorsJson: 'LOGIN_SELECTORS_JSON',
   aiApiKey: 'AI_API_KEY',
   aiModel: 'AI_MODEL',
   aiBaseUrl: 'AI_BASE_URL',
-  aiInstruction: 'AI_INSTRUCTION',
-  aiIntervalMin: 'AI_INTERVAL_MIN',
-  aiMaxSteps: 'AI_MAX_STEPS',
-  selectorsJson: 'SELECTORS_JSON',
-  stepsJson: 'STEPS_JSON',
-  speed: 'SPEED',
-  actionDelayMs: 'ACTION_DELAY_MS',
-  keepaliveSec: 'KEEPALIVE_SEC',
-  securityTimeoutMin: 'SECURITY_TIMEOUT_MIN',
+  taskText: 'TASK_TEXT',
+  scanIntervalMs: 'SCAN_INTERVAL_MS',
+  confirmDelayMs: 'CONFIRM_DELAY_MS',
+  mouseMoveSec: 'MOUSE_MOVE_SEC',
   scheduleEnabled: 'SCHEDULE_ENABLED',
   scheduleFrom: 'SCHEDULE_FROM',
   scheduleTo: 'SCHEDULE_TO',
   autostart: 'AUTOSTART',
-  evidenceShots: 'EVIDENCE_SHOTS',
   telegramToken: 'TELEGRAM_TOKEN',
   telegramChatId: 'TELEGRAM_CHAT_ID',
 };
+
+/** Санды параметрлердің қауіпсіз шектері. */
+const LIMITS: Partial<Record<keyof SemSettings, { min: number; max: number }>> = {
+  scanIntervalMs: { min: 50, max: 5000 },
+  confirmDelayMs: { min: 0, max: 5000 },
+  mouseMoveSec: { min: 15, max: 600 },
+  scheduleFrom: { min: 0, max: 23 },
+  scheduleTo: { min: 0, max: 23 },
+};
+
+function clampNum(key: keyof SemSettings, v: number): number {
+  const l = LIMITS[key];
+  if (!l) return v;
+  return Math.min(l.max, Math.max(l.min, v));
+}
 
 function envValue(key: keyof SemSettings): unknown {
   const name = ENV_KEYS[key];
@@ -93,14 +103,13 @@ function envValue(key: keyof SemSettings): unknown {
   const def = DEFAULT_SETTINGS[key];
   if (typeof def === 'number') {
     const n = Number(raw);
-    return Number.isFinite(n) ? n : undefined;
+    return Number.isFinite(n) ? clampNum(key, n) : undefined;
   }
   if (typeof def === 'boolean') return raw === 'true' || raw === '1';
   return raw;
 }
 
 const stmtAll = db.prepare('SELECT key,value FROM settings');
-const stmtGet = db.prepare('SELECT value FROM settings WHERE key=?');
 const stmtSet = db.prepare(
   'INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value'
 );
@@ -118,6 +127,11 @@ export function getAllSettings(): SemSettings {
   for (const key of SETTINGS_KEYS) {
     const ev = envValue(key);
     if (ev !== undefined) out[key] = ev;
+    /* Дискідегі сан да шектен шықпауы керек: 10 мс скан браузерді жүктейді. */
+    if (typeof DEFAULT_SETTINGS[key] === 'number') {
+      const n = Number(out[key]);
+      out[key] = Number.isFinite(n) ? clampNum(key, n) : DEFAULT_SETTINGS[key];
+    }
   }
   return out as unknown as SemSettings;
 }
@@ -129,7 +143,16 @@ export function getSetting<K extends keyof SemSettings>(key: K): SemSettings[K] 
 export function setSettingsPatch(patch: Partial<Record<string, unknown>>): void {
   for (const [k, v] of Object.entries(patch)) {
     if (!SETTINGS_KEYS.includes(k as keyof SemSettings)) continue;
-    stmtSet.run(k, JSON.stringify(v));
+    const key = k as keyof SemSettings;
+    let value: unknown = v;
+    if (typeof DEFAULT_SETTINGS[key] === 'number') {
+      const n = Number(v);
+      value = Number.isFinite(n) ? clampNum(key, n) : DEFAULT_SETTINGS[key];
+    }
+    if (typeof DEFAULT_SETTINGS[key] === 'boolean') {
+      value = v === true || v === 'true' || v === 1 || v === '1';
+    }
+    stmtSet.run(k, JSON.stringify(value));
   }
 }
 
